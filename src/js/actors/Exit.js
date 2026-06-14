@@ -49,7 +49,6 @@ export class Exit extends Actor {
             'font-family: "Press Start 2P", monospace',
             'font-size: 32px',
             'color: #00cc44',
-            'text-shadow: 4px 4px 0 black',
         ].join(';')
 
         const btn = document.createElement('button')
@@ -63,7 +62,6 @@ export class Exit extends Actor {
             'padding: 16px 32px',
             'cursor: pointer',
             'text-shadow: none',
-            'box-shadow: 4px 4px 0 #007722',
         ].join(';')
         btn.onclick = () => window.location.reload()
 

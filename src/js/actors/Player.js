@@ -169,7 +169,6 @@ export class Player extends Actor {
             'font-family: "Press Start 2P", monospace',
             'font-size: 40px',
             'color: #cc2200',
-            'text-shadow: 4px 4px 0 black',
         ].join(';')
 
         const btn = document.createElement('button')
@@ -182,7 +181,6 @@ export class Player extends Actor {
             'border: none',
             'padding: 16px 32px',
             'cursor: pointer',
-            'box-shadow: 4px 4px 0 #660000',
         ].join(';')
         btn.onclick = () => window.location.reload()
 

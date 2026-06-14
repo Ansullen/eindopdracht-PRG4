@@ -19,7 +19,7 @@ export function showStartScreen() {
             'font-family: "Press Start 2P", monospace',
             'font-size: 48px',
             'color: #cc2200',
-            'text-shadow: 0 0 20px #cc2200, 4px 4px 0 black',
+            'text-shadow: 4px 4px 0 black',
             'letter-spacing: 4px',
             'text-align: center',
         ].join(';')
@@ -34,11 +34,7 @@ export function showStartScreen() {
             'border: none',
             'padding: 20px 60px',
             'cursor: pointer',
-            'box-shadow: 6px 6px 0 #660000',
-            'transition: transform 0.1s',
         ].join(';')
-        btn.onmouseenter = () => btn.style.transform = 'scale(1.05)'
-        btn.onmouseleave = () => btn.style.transform = 'scale(1)'
         btn.onclick = () => {
             overlay.remove()
             resolve()
