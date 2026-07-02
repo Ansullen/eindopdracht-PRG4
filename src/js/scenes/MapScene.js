@@ -1,9 +1,10 @@
-import { Scene, TileMap, Rectangle, Color, vec } from 'excalibur'
+import { Scene, TileMap, vec } from 'excalibur'
 import { Player } from '../actors/Player.js'
 import { Zombie } from '../actors/Zombie.js'
 import { AmmoPickup } from '../actors/AmmoPickup.js'
 import { Key } from '../actors/Key.js'
 import { Exit } from '../actors/Exit.js'
+import { Res } from '../resources.js'
 
 const TILE = 64
 const COLS = 20
@@ -24,11 +25,14 @@ const MAP = [
     '####################',
 ]
 
-const wallGraphic = new Rectangle({ width: TILE, height: TILE, color: Color.fromHex('#1a0000') })
-const floorGraphic = new Rectangle({ width: TILE, height: TILE, color: Color.fromHex('#2a2a2a') })
-
 export class MapScene extends Scene {
     onInitialize(engine) {
+        const scale = vec(TILE / 16, TILE / 16)
+        const wallSprite = Res.wall.toSprite()
+        wallSprite.scale = scale
+        const floorSprite = Res.floor.toSprite()
+        floorSprite.scale = scale
+
         const tilemap = new TileMap({
             pos: vec(0, 0),
             tileWidth: TILE,
@@ -48,7 +52,7 @@ export class MapScene extends Scene {
                 const char = MAP[row][col]
                 const tile = tilemap.getTile(col, row)
                 tile.solid = char === '#'
-                tile.addGraphic(char === '#' ? wallGraphic : floorGraphic)
+                tile.addGraphic(char === '#' ? wallSprite : floorSprite)
                 const pos = vec(col * TILE + TILE / 2, row * TILE + TILE / 2)
                 if (char === 'P') playerSpawn = pos
                 if (char === 'Z') zombieSpawns.push(pos)

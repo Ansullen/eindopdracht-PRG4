@@ -1,23 +1,16 @@
-import { Actor, Rectangle, Color, CollisionType } from 'excalibur'
+import { Pickup } from './Pickup.js'
+import { Res } from '../resources.js'
 
-export class AmmoPickup extends Actor {
+export class AmmoPickup extends Pickup {
     constructor(x, y) {
-        super({
-            x,
-            y,
-            width: 16,
-            height: 10,
-            collisionType: CollisionType.Passive,
-        })
+        super(x, y, 16, 10)
     }
 
     onInitialize(engine) {
-        this.graphics.use(new Rectangle({ width: 16, height: 10, color: Color.fromHex('#f5c400') }))
-        this.on('collisionstart', (evt) => {
-            const other = evt.other?.owner
-            if (!other?.hasTag('player')) return
-            other.pickupAmmo(10)
-            this.kill()
-        })
+        this.graphics.use(Res.ammo.toSprite())
+    }
+
+    applyPickup(player) {
+        player.pickupAmmo(10)
     }
 }

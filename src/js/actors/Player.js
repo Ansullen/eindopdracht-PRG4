@@ -1,34 +1,38 @@
-import { Actor, Circle, Color, CollisionType, Keys, vec } from 'excalibur'
+import { Actor, CollisionType, Keys, vec } from 'excalibur'
 import { Bullet } from './Bullet.js'
+import { Res } from '../resources.js'
 
 const SPEED = 80
 const MAX_AMMO = 10
 const MAX_HP = 100
 
 export class Player extends Actor {
+    #hud
+    #killHUD
+    #placeHUD
+
+    hp = MAX_HP
+    ammo = MAX_AMMO
+    reserveAmmo = 0
+    hasKey = false
+    won = false
+    dead = false
+    kills = 0
+
     constructor(x, y) {
         super({
             x,
             y,
             radius: 10,
-            color: Color.Blue,
             collisionType: CollisionType.Active,
         })
-        this.addTag('player')
     }
 
     onInitialize(engine) {
-        this.hp = MAX_HP
-        this.ammo = MAX_AMMO
-        this.reserveAmmo = 0
-        this.hasKey = false
-        this.won = false
-        this.dead = false
-        this.kills = 0
-        this.graphics.use(new Circle({ radius: 10, color: Color.Blue }))
+        this.graphics.use(Res.player.toSprite())
 
-        this._hud = document.createElement('div')
-        this._hud.style.cssText = [
+        this.#hud = document.createElement('div')
+        this.#hud.style.cssText = [
             'position: fixed',
             'font-family: "Press Start 2P", monospace',
             'font-size: 14px',
@@ -38,11 +42,11 @@ export class Player extends Actor {
             'z-index: 999',
             'pointer-events: none',
         ].join(';')
-        document.body.appendChild(this._hud)
-        this._updateHUD()
+        document.body.appendChild(this.#hud)
+        this.#updateHUD()
 
-        this._killHUD = document.createElement('div')
-        this._killHUD.style.cssText = [
+        this.#killHUD = document.createElement('div')
+        this.#killHUD.style.cssText = [
             'position: fixed',
             'font-family: "Press Start 2P", monospace',
             'font-size: 14px',
@@ -53,18 +57,18 @@ export class Player extends Actor {
             'pointer-events: none',
             'text-align: right',
         ].join(';')
-        document.body.appendChild(this._killHUD)
-        this._updateKillHUD()
+        document.body.appendChild(this.#killHUD)
+        this.#updateKillHUD()
 
-        this._placeHUD = () => {
+        this.#placeHUD = () => {
             const rect = engine.canvas.getBoundingClientRect()
-            this._hud.style.left = (rect.left + 20) + 'px'
-            this._hud.style.top  = (rect.top  + 20) + 'px'
-            this._killHUD.style.right = (window.innerWidth - rect.right + 20) + 'px'
-            this._killHUD.style.top   = (rect.top + 20) + 'px'
+            this.#hud.style.left = (rect.left + 20) + 'px'
+            this.#hud.style.top  = (rect.top  + 20) + 'px'
+            this.#killHUD.style.right = (window.innerWidth - rect.right + 20) + 'px'
+            this.#killHUD.style.top   = (rect.top + 20) + 'px'
         }
-        this._placeHUD()
-        window.addEventListener('resize', this._placeHUD)
+        this.#placeHUD()
+        window.addEventListener('resize', this.#placeHUD)
 
         engine.input.pointers.primary.on('down', (evt) => {
             if (this.ammo <= 0 || this.dead || this.won) return
@@ -78,21 +82,21 @@ export class Player extends Actor {
             const bullet = new Bullet(this.pos.x + nx * 15, this.pos.y + ny * 15, nx, ny)
             this.scene.add(bullet)
             this.ammo--
-            this._updateHUD()
+            this.#updateHUD()
         })
     }
 
-    _hpColor() {
+    #hpColor() {
         const pct = this.hp / MAX_HP
         if (pct > 0.6) return '#00cc44'
         if (pct > 0.3) return '#ffcc00'
         return '#cc2200'
     }
 
-    _updateHUD() {
+    #updateHUD() {
         const pct = Math.max(0, this.hp / MAX_HP) * 100
-        const color = this._hpColor()
-        this._hud.innerHTML = `
+        const color = this.#hpColor()
+        this.#hud.innerHTML = `
             <div style="margin-bottom:4px">
                 HP
                 <span style="display:inline-block;width:120px;height:10px;background:#333;border:2px solid white;vertical-align:middle;margin-left:8px">
@@ -105,48 +109,48 @@ export class Player extends Actor {
         `
     }
 
-    _updateKillHUD() {
-        this._killHUD.innerHTML = `KILLS: ${this.kills}`
+    #updateKillHUD() {
+        this.#killHUD.innerHTML = `KILLS: ${this.kills}`
     }
 
     addKill() {
         this.kills++
-        this._updateKillHUD()
+        this.#updateKillHUD()
     }
 
     pickupAmmo(amount) {
         this.reserveAmmo += amount
-        this._updateHUD()
+        this.#updateHUD()
     }
 
     pickupKey() {
         this.hasKey = true
-        this._updateHUD()
+        this.#updateHUD()
     }
 
-    _reload() {
+    #reload() {
         if (this.ammo >= MAX_AMMO || this.reserveAmmo <= 0) return
         const needed = MAX_AMMO - this.ammo
         const take = Math.min(needed, this.reserveAmmo)
         this.ammo += take
         this.reserveAmmo -= take
-        this._updateHUD()
+        this.#updateHUD()
     }
 
-    onKill() {
-        this._hud?.remove()
-        this._killHUD?.remove()
-        window.removeEventListener('resize', this._placeHUD)
+    onPreKill(scene) {
+        this.#hud?.remove()
+        this.#killHUD?.remove()
+        window.removeEventListener('resize', this.#placeHUD)
     }
 
     takeDamage(amount) {
         if (this.dead) return
         this.hp = Math.max(0, this.hp - amount)
-        this._updateHUD()
-        if (this.hp <= 0) this._die()
+        this.#updateHUD()
+        if (this.hp <= 0) this.#die()
     }
 
-    _die() {
+    #die() {
         this.dead = true
         this.vel = vec(0, 0)
 
@@ -204,7 +208,7 @@ export class Player extends Actor {
         if (keys.isHeld(Keys.A) || keys.isHeld(Keys.Left))  vx = -SPEED
         if (keys.isHeld(Keys.D) || keys.isHeld(Keys.Right)) vx =  SPEED
 
-        if (keys.wasPressed(Keys.R)) this._reload()
+        if (keys.wasPressed(Keys.R)) this.#reload()
 
         this.vel = vec(vx, vy)
     }

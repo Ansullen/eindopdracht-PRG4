@@ -1,11 +1,15 @@
-import { Actor, Rectangle, Color, CollisionType, vec } from 'excalibur'
+import { Actor, CollisionType, vec } from 'excalibur'
 import { Zombie } from './Zombie.js'
+import { Player } from './Player.js'
+import { Res } from '../resources.js'
 
 const BULLET_SPEED = 300
 const MAX_DISTANCE = 500
 const TILE = 64
 
 export class Bullet extends Actor {
+    #startPos
+
     constructor(x, y, dirX, dirY) {
         super({
             x,
@@ -16,17 +20,18 @@ export class Bullet extends Actor {
         })
         this.rotation = Math.atan2(dirY, dirX)
         this.vel = vec(dirX * BULLET_SPEED, dirY * BULLET_SPEED)
-        this._startPos = vec(x, y)
+        this.#startPos = vec(x, y)
     }
 
     onInitialize(engine) {
-        this.graphics.use(new Rectangle({ width: 14, height: 3, color: Color.fromHex('#ffe066') }))
-        this.on('collisionstart', (evt) => {
-            const other = evt.other?.owner
-            if (!other || other.hasTag('player')) return
-            if (other instanceof Zombie) other.takeDamage(20)
-            this.kill()
-        })
+        this.graphics.use(Res.bullet.toSprite())
+    }
+
+    onCollisionStart(self, other) {
+        const owner = other.owner
+        if (!owner || owner instanceof Player) return
+        if (owner instanceof Zombie) owner.takeDamage(20)
+        this.kill()
     }
 
     onPreUpdate() {
@@ -38,8 +43,8 @@ export class Bullet extends Actor {
             return
         }
 
-        const dx = this.pos.x - this._startPos.x
-        const dy = this.pos.y - this._startPos.y
+        const dx = this.pos.x - this.#startPos.x
+        const dy = this.pos.y - this.#startPos.y
         if (dx * dx + dy * dy > MAX_DISTANCE * MAX_DISTANCE) {
             this.kill()
         }

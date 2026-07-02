@@ -1,35 +1,43 @@
-import { Actor, Rectangle, Color, CollisionType } from 'excalibur'
-
-const LOCKED = new Rectangle({ width: 40, height: 40, color: Color.fromHex('#cc2200') })
-const OPEN   = new Rectangle({ width: 40, height: 40, color: Color.fromHex('#00cc44') })
+import { Actor, CollisionType, vec } from 'excalibur'
+import { Player } from './Player.js'
+import { Res } from '../resources.js'
 
 export class Exit extends Actor {
+    #player
+    #isOpen = false
+    #lockedSprite
+    #openSprite
+
     constructor(x, y, player) {
         super({ x, y, width: 40, height: 40, collisionType: CollisionType.Passive })
-        this._player = player
-        this._isOpen = false
+        this.#player = player
     }
 
     onInitialize(engine) {
-        this.graphics.use(LOCKED)
-        this.on('collisionstart', (evt) => {
-            const other = evt.other?.owner
-            if (!other?.hasTag('player')) return
-            if (!other.hasKey) return
-            other.won = true
-            this._showWin(engine)
-        })
+        this.#lockedSprite = Res.exitLocked.toSprite()
+        this.#lockedSprite.scale = vec(2, 2)
+        this.#openSprite = Res.exitOpen.toSprite()
+        this.#openSprite.scale = vec(2, 2)
+        this.graphics.use(this.#lockedSprite)
+    }
+
+    onCollisionStart(self, other) {
+        const owner = other.owner
+        if (!(owner instanceof Player)) return
+        if (!owner.hasKey) return
+        owner.won = true
+        this.#showWin(this.scene.engine)
     }
 
     onPreUpdate() {
-        const open = this._player.hasKey
-        if (open !== this._isOpen) {
-            this._isOpen = open
-            this.graphics.use(open ? OPEN : LOCKED)
+        const open = this.#player.hasKey
+        if (open !== this.#isOpen) {
+            this.#isOpen = open
+            this.graphics.use(open ? this.#openSprite : this.#lockedSprite)
         }
     }
 
-    _showWin(engine) {
+    #showWin(engine) {
         const overlay = document.createElement('div')
         overlay.style.cssText = [
             'position: fixed',

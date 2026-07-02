@@ -13,7 +13,8 @@ export class Game extends Engine {
             maxFps: 60,
             displayMode: DisplayMode.FitScreen,
             backgroundColor: Color.fromHex('#050d05'),
-         })
+            pixelArt: true,
+        })
 
         this.addScene('map', new MapScene())
         this.start(ResourceLoader).then(() => showStartScreen()).then(() => this.goToScene('map'))
