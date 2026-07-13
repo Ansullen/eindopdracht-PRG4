@@ -1,14 +1,13 @@
-import { Actor, CollisionType, vec } from 'excalibur'
+import { Actor, CollisionType, TileMap, vec } from 'excalibur'
 import { Zombie } from './Zombie.js'
-import { Player } from './Player.js'
-import { Res } from '../resources.js'
 
-const BULLET_SPEED = 300
-const MAX_DISTANCE = 500
+const BULLET_SPEED = 400
+const MAX_DISTANCE = 600
 const TILE = 64
 
 export class Bullet extends Actor {
     #startPos
+    #dir
 
     constructor(x, y, dirX, dirY) {
         super({
@@ -21,17 +20,18 @@ export class Bullet extends Actor {
         this.rotation = Math.atan2(dirY, dirX)
         this.vel = vec(dirX * BULLET_SPEED, dirY * BULLET_SPEED)
         this.#startPos = vec(x, y)
+        this.#dir = vec(dirX, dirY)
     }
 
-    onInitialize(engine) {
-        this.graphics.use(Res.bullet.toSprite())
-    }
-
+    // only zombies and walls stop a bullet — it flies clean over pickups and the exit
     onCollisionStart(self, other) {
         const owner = other.owner
-        if (!owner || owner instanceof Player) return
-        if (owner instanceof Zombie) owner.takeDamage(20)
-        this.kill()
+        if (owner instanceof Zombie) {
+            owner.takeDamage(20, this.#dir)
+            this.kill()
+        } else if (owner instanceof TileMap) {
+            this.kill()
+        }
     }
 
     onPreUpdate() {

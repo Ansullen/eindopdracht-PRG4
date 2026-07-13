@@ -4,35 +4,15 @@ import { Zombie } from '../actors/Zombie.js'
 import { AmmoPickup } from '../actors/AmmoPickup.js'
 import { Key } from '../actors/Key.js'
 import { Exit } from '../actors/Exit.js'
-import { Res } from '../resources.js'
-
-const TILE = 64
-const COLS = 20
-const ROWS = 11
-
-// . = floor, # = wall, P = player spawn, Z = zombie spawn, A = ammo pickup, K = key, E = exit
-const MAP = [
-    '####################',
-    '#P....#.Z..Z..#.A.E#',
-    '#.##..#.###.#.#.##.#',
-    '#.#..Z..A.#.#..Z.#.#',
-    '#.#.####..#.####.#.#',
-    '#.ZA......Z....Z...#',
-    '#.#.####Z.#.####.#.#',
-    '#Z#.A..Z..#.#..Z.#.#',
-    '#.##..#.###.#.#.##.#',
-    '#..Z..#.Z..Z..#.A.K#',
-    '####################',
-]
+import { RaycastView } from '../render/view.js'
+import { WorldFX } from '../render/worldfx.js'
+import { MAP, TILE, COLS, ROWS } from '../level.js'
 
 export class MapScene extends Scene {
     onInitialize(engine) {
-        const scale = vec(TILE / 16, TILE / 16)
-        const wallSprite = Res.wall.toSprite()
-        wallSprite.scale = scale
-        const floorSprite = Res.floor.toSprite()
-        floorSprite.scale = scale
+        WorldFX.reset()
 
+        // solid tiles drive physics only — the world is drawn by the RaycastView
         const tilemap = new TileMap({
             pos: vec(0, 0),
             tileWidth: TILE,
@@ -50,9 +30,7 @@ export class MapScene extends Scene {
         for (let row = 0; row < ROWS; row++) {
             for (let col = 0; col < COLS; col++) {
                 const char = MAP[row][col]
-                const tile = tilemap.getTile(col, row)
-                tile.solid = char === '#'
-                tile.addGraphic(char === '#' ? wallSprite : floorSprite)
+                tilemap.getTile(col, row).solid = char === '#'
                 const pos = vec(col * TILE + TILE / 2, row * TILE + TILE / 2)
                 if (char === 'P') playerSpawn = pos
                 if (char === 'Z') zombieSpawns.push(pos)
@@ -84,7 +62,6 @@ export class MapScene extends Scene {
             this.add(new Exit(pos.x, pos.y, player))
         }
 
-        this.camera.strategy.lockToActor(player)
-        this.camera.zoom = 2
+        this.add(new RaycastView(player))
     }
 }

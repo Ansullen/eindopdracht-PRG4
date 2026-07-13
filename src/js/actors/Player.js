@@ -1,16 +1,24 @@
 import { Actor, CollisionType, Keys, vec } from 'excalibur'
 import { Bullet } from './Bullet.js'
-import { Res } from '../resources.js'
+import { Sfx } from '../audio.js'
+import { WorldFX } from '../render/worldfx.js'
+import { showPopup, showEndOverlay } from '../ui/popup.js'
 
-const SPEED = 80
+const FWD_SPEED = 140
+const BACK_SPEED = 100
+const STRAFE_SPEED = 110
+const TURN_SPEED = 150 * Math.PI / 180 // rad/s
+const MOUSE_SENS = 0.0022
 const MAX_AMMO = 10
 const MAX_HP = 100
+const FIRE_COOLDOWN = 220
+const RELOAD_TIME = 400
+
+function normalizeAngle(a) {
+    return ((a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI
+}
 
 export class Player extends Actor {
-    #hud
-    #killHUD
-    #placeHUD
-
     hp = MAX_HP
     ammo = MAX_AMMO
     reserveAmmo = 0
@@ -18,6 +26,13 @@ export class Player extends Actor {
     won = false
     dead = false
     kills = 0
+    angle = 0
+    reloadUntil = 0
+
+    #lastShotAt = -Infinity
+    #pendingReload = false
+    #onPointerMove
+    #onCanvasClick
 
     constructor(x, y) {
         super({
@@ -29,187 +44,156 @@ export class Player extends Actor {
     }
 
     onInitialize(engine) {
-        this.graphics.use(Res.player.toSprite())
-
-        this.#hud = document.createElement('div')
-        this.#hud.style.cssText = [
-            'position: fixed',
-            'font-family: "Press Start 2P", monospace',
-            'font-size: 14px',
-            'color: white',
-            'line-height: 2',
-            'text-shadow: 2px 2px 0 black',
-            'z-index: 999',
-            'pointer-events: none',
-        ].join(';')
-        document.body.appendChild(this.#hud)
-        this.#updateHUD()
-
-        this.#killHUD = document.createElement('div')
-        this.#killHUD.style.cssText = [
-            'position: fixed',
-            'font-family: "Press Start 2P", monospace',
-            'font-size: 14px',
-            'color: white',
-            'line-height: 2',
-            'text-shadow: 2px 2px 0 black',
-            'z-index: 999',
-            'pointer-events: none',
-            'text-align: right',
-        ].join(';')
-        document.body.appendChild(this.#killHUD)
-        this.#updateKillHUD()
-
-        this.#placeHUD = () => {
-            const rect = engine.canvas.getBoundingClientRect()
-            this.#hud.style.left = (rect.left + 20) + 'px'
-            this.#hud.style.top  = (rect.top  + 20) + 'px'
-            this.#killHUD.style.right = (window.innerWidth - rect.right + 20) + 'px'
-            this.#killHUD.style.top   = (rect.top + 20) + 'px'
+        // pointer lock: acquire on click (also re-entry after Esc); the locking
+        // click never shoots because the shoot handler requires an active lock
+        this.#onCanvasClick = () => {
+            if (!this.dead && !this.won && document.pointerLockElement !== engine.canvas) {
+                engine.canvas.requestPointerLock()
+            }
         }
-        this.#placeHUD()
-        window.addEventListener('resize', this.#placeHUD)
+        engine.canvas.addEventListener('click', this.#onCanvasClick)
 
-        engine.input.pointers.primary.on('down', (evt) => {
-            if (this.ammo <= 0 || this.dead || this.won) return
-            const worldPos = evt.worldPos
-            const dx = worldPos.x - this.pos.x
-            const dy = worldPos.y - this.pos.y
-            const len = Math.sqrt(dx * dx + dy * dy)
-            if (len === 0) return
-            const nx = dx / len
-            const ny = dy / len
-            const bullet = new Bullet(this.pos.x + nx * 15, this.pos.y + ny * 15, nx, ny)
-            this.scene.add(bullet)
-            this.ammo--
-            this.#updateHUD()
+        this.#onPointerMove = (e) => {
+            if (document.pointerLockElement === engine.canvas && !this.dead && !this.won) {
+                this.angle += e.movementX * MOUSE_SENS
+            }
+        }
+        document.addEventListener('pointermove', this.#onPointerMove)
+
+        engine.input.pointers.primary.on('down', () => {
+            if (document.pointerLockElement !== engine.canvas) return
+            this.#shoot(engine)
         })
     }
 
-    #hpColor() {
-        const pct = this.hp / MAX_HP
-        if (pct > 0.6) return '#00cc44'
-        if (pct > 0.3) return '#ffcc00'
-        return '#cc2200'
+    #shoot(engine) {
+        if (this.dead || this.won) return
+        const now = engine.clock.now()
+        if (now - this.#lastShotAt < FIRE_COOLDOWN || this.reloadUntil > now) return
+        this.#lastShotAt = now
+
+        if (this.ammo <= 0) {
+            Sfx.dryFire()
+            WorldFX.emit('dry')
+            return
+        }
+        const nx = Math.cos(this.angle)
+        const ny = Math.sin(this.angle)
+        this.scene.add(new Bullet(this.pos.x + nx * 15, this.pos.y + ny * 15, nx, ny))
+        this.ammo--
+        Sfx.shoot()
+        WorldFX.emit('shoot')
     }
 
-    #updateHUD() {
-        const pct = Math.max(0, this.hp / MAX_HP) * 100
-        const color = this.#hpColor()
-        this.#hud.innerHTML = `
-            <div style="margin-bottom:4px">
-                HP
-                <span style="display:inline-block;width:120px;height:10px;background:#333;border:2px solid white;vertical-align:middle;margin-left:8px">
-                    <span style="display:block;width:${pct}%;height:100%;background:${color};transition:width 0.1s"></span>
-                </span>
-                ${this.hp}
-            </div>
-            AMMO: ${this.ammo} / ${this.reserveAmmo}<br>
-            KEY: ${this.hasKey ? 'YES' : 'NO'}
-        `
-    }
-
-    #updateKillHUD() {
-        this.#killHUD.innerHTML = `KILLS: ${this.kills}`
+    #reload(engine) {
+        const now = engine.clock.now()
+        if (this.reloadUntil > now || this.#pendingReload) return
+        if (this.ammo >= MAX_AMMO || this.reserveAmmo <= 0) return
+        this.reloadUntil = now + RELOAD_TIME
+        this.#pendingReload = true
+        Sfx.reload()
     }
 
     addKill() {
         this.kills++
-        this.#updateKillHUD()
     }
 
     pickupAmmo(amount) {
         this.reserveAmmo += amount
-        this.#updateHUD()
+        Sfx.pickup()
+        WorldFX.emit('pickup')
+        showPopup(`+${amount} AMMO`)
     }
 
     pickupKey() {
         this.hasKey = true
-        this.#updateHUD()
+        Sfx.keyPickup()
+        WorldFX.emit('key')
+        showPopup('KEY ACQUIRED', '#ffc83c')
     }
 
-    #reload() {
-        if (this.ammo >= MAX_AMMO || this.reserveAmmo <= 0) return
-        const needed = MAX_AMMO - this.ammo
-        const take = Math.min(needed, this.reserveAmmo)
-        this.ammo += take
-        this.reserveAmmo -= take
-        this.#updateHUD()
+    win() {
+        if (this.won || this.dead) return
+        this.won = true
+        this.vel = vec(0, 0)
+        Sfx.win()
+        WorldFX.emit('win')
+        document.exitPointerLock()
+        setTimeout(() => showEndOverlay('TAPE RECOVERED', `you escaped - ${this.kills} terminated`, '#00cc44'), 1400)
     }
 
-    onPreKill(scene) {
-        this.#hud?.remove()
-        this.#killHUD?.remove()
-        window.removeEventListener('resize', this.#placeHUD)
-    }
-
-    takeDamage(amount) {
-        if (this.dead) return
+    takeDamage(amount, fromPos) {
+        if (this.dead || this.won) return
         this.hp = Math.max(0, this.hp - amount)
-        this.#updateHUD()
+
+        let bucket = 2 // back
+        if (fromPos) {
+            const rel = normalizeAngle(Math.atan2(fromPos.y - this.pos.y, fromPos.x - this.pos.x) - this.angle)
+            if (Math.abs(rel) < Math.PI / 4) bucket = 0        // front
+            else if (rel >= Math.PI / 4 && rel < Math.PI * 0.75) bucket = 1 // right
+            else if (rel <= -Math.PI / 4 && rel > -Math.PI * 0.75) bucket = 3 // left
+        }
+        Sfx.hurt()
+        WorldFX.emit('damage', bucket)
+
         if (this.hp <= 0) this.#die()
     }
 
     #die() {
         this.dead = true
         this.vel = vec(0, 0)
-
-        const overlay = document.createElement('div')
-        overlay.style.cssText = [
-            'position: fixed',
-            'inset: 0',
-            'display: flex',
-            'flex-direction: column',
-            'align-items: center',
-            'justify-content: center',
-            'gap: 48px',
-            'background: rgba(0,0,0,0.8)',
-            'z-index: 9999',
-        ].join(';')
-
-        const title = document.createElement('div')
-        title.textContent = 'YOU DIED'
-        title.style.cssText = [
-            'font-family: "Press Start 2P", monospace',
-            'font-size: 40px',
-            'color: #cc2200',
-        ].join(';')
-
-        const btn = document.createElement('button')
-        btn.textContent = 'PLAY AGAIN'
-        btn.style.cssText = [
-            'font-family: "Press Start 2P", monospace',
-            'font-size: 16px',
-            'color: white',
-            'background: #cc2200',
-            'border: none',
-            'padding: 16px 32px',
-            'cursor: pointer',
-        ].join(';')
-        btn.onclick = () => window.location.reload()
-
-        overlay.appendChild(title)
-        overlay.appendChild(btn)
-        document.body.appendChild(overlay)
+        Sfx.death()
+        WorldFX.emit('death')
+        document.exitPointerLock()
+        setTimeout(() => showEndOverlay('FEED TERMINATED', 'the corridor keeps you', '#cc2200'), 1900)
     }
 
-    onPreUpdate(engine) {
+    onPreKill() {
+        document.removeEventListener('pointermove', this.#onPointerMove)
+        this.scene?.engine?.canvas.removeEventListener('click', this.#onCanvasClick)
+    }
+
+    onPreUpdate(engine, delta) {
         if (this.won || this.dead) {
             this.vel = vec(0, 0)
             return
         }
 
         const keys = engine.input.keyboard
-        let vx = 0
-        let vy = 0
+        const dt = delta / 1000
 
-        if (keys.isHeld(Keys.W) || keys.isHeld(Keys.Up))    vy = -SPEED
-        if (keys.isHeld(Keys.S) || keys.isHeld(Keys.Down))  vy =  SPEED
-        if (keys.isHeld(Keys.A) || keys.isHeld(Keys.Left))  vx = -SPEED
-        if (keys.isHeld(Keys.D) || keys.isHeld(Keys.Right)) vx =  SPEED
+        if (keys.isHeld(Keys.Left)) this.angle -= TURN_SPEED * dt
+        if (keys.isHeld(Keys.Right)) this.angle += TURN_SPEED * dt
+        if (keys.wasPressed(Keys.R)) this.#reload(engine)
+        if (keys.wasPressed(Keys.Space)) this.#shoot(engine)
 
-        if (keys.wasPressed(Keys.R)) this.#reload()
+        // finish a pending reload once the timer runs out
+        if (this.#pendingReload && engine.clock.now() >= this.reloadUntil) {
+            this.#pendingReload = false
+            const take = Math.min(MAX_AMMO - this.ammo, this.reserveAmmo)
+            this.ammo += take
+            this.reserveAmmo -= take
+        }
 
-        this.vel = vec(vx, vy)
+        let f = 0
+        let s = 0
+        if (keys.isHeld(Keys.W) || keys.isHeld(Keys.Up)) f += 1
+        if (keys.isHeld(Keys.S) || keys.isHeld(Keys.Down)) f -= 1
+        if (keys.isHeld(Keys.A)) s -= 1
+        if (keys.isHeld(Keys.D)) s += 1
+
+        const fx = Math.cos(this.angle)
+        const fy = Math.sin(this.angle)
+        const diag = f !== 0 && s !== 0 ? Math.SQRT1_2 : 1
+        const fSpeed = f > 0 ? FWD_SPEED : BACK_SPEED // backpedaling is slower: retreat is a choice
+        const tx = (fx * f * fSpeed - fy * s * STRAFE_SPEED) * diag
+        const ty = (fy * f * fSpeed + fx * s * STRAFE_SPEED) * diag
+
+        // short acceleration ramp (~80ms to speed) so movement has weight
+        const k = 1 - Math.pow(0.0001, dt)
+        this.vel = vec(
+            this.vel.x + (tx - this.vel.x) * k,
+            this.vel.y + (ty - this.vel.y) * k,
+        )
     }
 }

@@ -17,7 +17,7 @@ export class Game extends Engine {
         })
 
         this.addScene('map', new MapScene())
-        this.start(ResourceLoader).then(() => showStartScreen()).then(() => this.goToScene('map'))
+        this.start(ResourceLoader).then(() => showStartScreen(this)).then(() => this.goToScene('map'))
     }
 }
 

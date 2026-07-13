@@ -1,7 +1,12 @@
 body {
     margin: 0;
     padding: 0;
-    background-color: rgb(61, 61, 61);
+    background-color: #020402;
     display: flex;
     justify-content: center;
+    overflow: hidden;
+}
+
+canvas {
+    cursor: crosshair;
 }
