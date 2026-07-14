@@ -6,7 +6,7 @@
 import { ScreenElement, Canvas, ImageFiltering, vec } from 'excalibur'
 import { Raycaster, makeCamera } from './raycaster.js'
 import { GlitchFX } from './glitch.js'
-import { Sprites, makeCorruptTexture, makeOtherworldTexture } from './pixelart.js'
+import { Sprites, makeCorruptTexture, makeBloodWallSet } from './pixelart.js'
 import { drawDeathCard, drawWinCard } from './osd.js'
 import { WorldFX } from './worldfx.js'
 import { Res } from '../resources.js'
@@ -29,9 +29,8 @@ export class RaycastView extends ScreenElement {
     #b // buffer 2d context
     #raycaster
     #glitch
-    #wallTex
+    #walls // { normal: [3 variants], other: [3 variants] } — cycled so they writhe
     #corruptTex
-    #otherTex
 
     // otherworld state: the siren drags the corridor to the other side and back
     #otherworld = false
@@ -70,14 +69,9 @@ export class RaycastView extends ScreenElement {
         this.#raycaster = new Raycaster(W, H)
         this.#glitch = new GlitchFX(W, H)
 
-        // wall texture as a canvas for fast column sampling
-        const wt = document.createElement('canvas')
-        wt.width = Res.wall.image.width
-        wt.height = Res.wall.image.height
-        wt.getContext('2d').drawImage(Res.wall.image, 0, 0)
-        this.#wallTex = wt
-        this.#corruptTex = makeCorruptTexture(wt)
-        this.#otherTex = makeOtherworldTexture(wt)
+        // generated abstract bloody walls; corrupt variant built from one of them
+        this.#walls = makeBloodWallSet()
+        this.#corruptTex = makeCorruptTexture(this.#walls.other[0])
 
         Sfx.onCrackle = () => this.#glitch.addTrauma(0.05)
 
@@ -215,20 +209,19 @@ export class RaycastView extends ScreenElement {
 
         for (const a of this.scene.actors) {
             if (a instanceof Zombie) {
+                // the entity flickers through variant bodies; faster when it moves
                 let img
-                const walk = Math.floor((now + a.id * 137) / 350) % 2 === 0
-                if (a.state === 'windup') img = Sprites.zombieAttack
-                else if (a.state === 'chase') img = walk ? Sprites.zombieWalkA : Sprites.zombieWalkB
-                else img = Math.random() < 0.005 ? Sprites.zombieWalkB : Sprites.zombieWalkA // idle twitch
-                if (a.flashT > 0) {
-                    if (img === Sprites.zombieAttack) img = Sprites.zombieAttackFlash
-                    else if (img === Sprites.zombieWalkB) img = Sprites.zombieWalkBFlash
-                    else img = Sprites.zombieWalkAFlash
+                if (a.state === 'windup') {
+                    img = Sprites.entityAttack[(Math.floor(now / 80) + a.id) % 4]
+                } else {
+                    const rate = a.state === 'chase' ? 100 : 260
+                    img = Sprites.entityIdle[(Math.floor(now / rate) + a.id) % 8]
                 }
+                if (a.flashT > 0) img = Sprites.entityFlash
                 // body-horror jitter: single-frame stretches while it moves
-                let scale = 0.8
-                if (a.state !== 'idle' && Math.random() < 0.07) {
-                    scale += (Math.random() - 0.3) * 0.14
+                let scale = 0.85
+                if (a.state !== 'idle' && Math.random() < 0.15) {
+                    scale += (Math.random() - 0.35) * 0.2
                 }
                 sprites.push({ x: a.pos.x / TILE, y: a.pos.y / TILE, img, scale, vShift: 1 - scale })
             } else if (a instanceof AmmoPickup || a instanceof Key) {
@@ -325,8 +318,12 @@ export class RaycastView extends ScreenElement {
         const fogDist = ow ? 3.8 : 6
         const wobble = ow ? 1.3 : (this.#proximity > 0.6 ? 0.5 : 0)
 
+        // the walls crawl: cycle generated variants (fast writhe on the other side)
+        const set = ow ? this.#walls.other : this.#walls.normal
+        const wallTex = set[Math.floor(now / (ow ? 160 : 420)) % set.length]
+
         const cam = makeCamera(p.pos.x / TILE, p.pos.y / TILE, p.angle, FOV)
-        this.#raycaster.renderWalls(b, Level, cam, ow ? this.#otherTex : this.#wallTex, horizon, {
+        this.#raycaster.renderWalls(b, Level, cam, wallTex, horizon, {
             lightPop,
             corruption,
             corruptTex: this.#corruptTex,

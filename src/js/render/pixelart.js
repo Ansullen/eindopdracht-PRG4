@@ -19,103 +19,110 @@ function makeSprite(rows, palette) {
     return c
 }
 
-const ZOMBIE_PALETTE = {
-    'o': '#060a08', // outline
-    'g': '#3d5240', // rotten skin
-    'G': '#5a7355', // skin highlight
-    'e': '#ff2b1b', // glowing eyes
-    'm': '#0c0708', // mouth
-    'c': '#14181a', // rags
-    'C': '#232a2d', // rags highlight
-    'b': '#7a1616', // blood
+// ---- glitch entities: unstable masses of dark static; only the eyes hold still ----
+const ENT_W = 20
+const ENT_H = 30
+
+function entityBodyAt(x, y) {
+    const cx = ENT_W / 2
+    const head = ((x - cx + 0.5) / 4.2) ** 2 + ((y - 6) / 4.6) ** 2 < 1
+    const torso = y >= 9 && y <= 21 &&
+        Math.abs(x - cx + Math.sin(y * 1.7) * 1.2) < 3.2 + (y - 9) * 0.28
+    const skirt = y > 21 && Math.abs(x - cx) < 6.5 &&
+        (x * 7 + 3) % 5 > 1 && y < 23 + ((x * 13) % 7)
+    return head || torso || skirt
 }
 
-const ZOMBIE_WALK_A = [
-    '................',
-    '.....oooooo.....',
-    '....oggggggo....',
-    '....ogGggGgo....',
-    '....ogeggego....',
-    '....oggggggo....',
-    '.....ogmmgo.....',
-    '......oggo......',
-    '....occccccoo...',
-    '...ogcccccccgo..',
-    '..ogoccbccocgo..',
-    '..ogo.ccccc.ogo.',
-    '..oGo.ccccc.oGo.',
-    '......ccccc.....',
-    '.....occccco....',
-    '.....occCcco....',
-    '.....occ.cco....',
-    '.....occ.cco....',
-    '....ogg...ggo...',
-    '....ogg...ggo...',
-    '....oggo.oggo...',
-    '.....ogo.ogo....',
-    '....oggo..ggo...',
-    '....oGGo..GGo...',
-    '................',
-    '................',
-]
+function makeEntityVariant(attack) {
+    const c = document.createElement('canvas')
+    c.width = ENT_W
+    c.height = ENT_H
+    const ctx = c.getContext('2d')
+    for (let y = 0; y < ENT_H; y++) {
+        const shift = Math.random() < 0.28 ? Math.round((Math.random() - 0.5) * 5) : 0
+        for (let x = 0; x < ENT_W; x++) {
+            if (!entityBodyAt(x, y)) continue
+            if (Math.random() < 0.14) continue // erosion — it never fully resolves
+            const r = Math.random()
+            ctx.fillStyle = r < 0.72 ? '#0a0404' : r < 0.9 ? '#1c0b09' : '#43100a'
+            ctx.fillRect(x + shift, y, 1, 1)
+        }
+    }
+    // stray signal artifacts in the mass
+    for (let i = 0; i < 3; i++) {
+        ctx.fillStyle = 'rgba(210,32,16,0.5)'
+        ctx.fillRect(Math.random() * ENT_W | 0, 4 + Math.random() * (ENT_H - 8) | 0,
+            1 + Math.random() * 3 | 0, 1 + Math.random() * 2 | 0)
+    }
+    // the eyes are the only stable thing about it
+    ctx.fillStyle = 'rgba(255,60,40,0.4)'
+    ctx.fillRect(6, 4, 4, 4)
+    ctx.fillRect(11, 4, 4, 4)
+    ctx.fillStyle = attack ? '#ff5030' : '#ff2b1b'
+    ctx.fillRect(7, 5, 2, 2)
+    ctx.fillRect(12, 5, 2, 2)
+    if (attack) {
+        // the maw: a void that opens when it lunges
+        ctx.fillStyle = '#000000'
+        ctx.fillRect(8, 9, 5, 8)
+        ctx.fillStyle = 'rgba(170,22,10,0.85)'
+        ctx.fillRect(8, 9, 5, 1)
+        ctx.fillRect(8, 16, 5, 1)
+    }
+    return c
+}
 
-const ZOMBIE_WALK_B = [
-    '................',
-    '.....oooooo.....',
-    '....oggggggo....',
-    '....ogGggGgo....',
-    '....ogeggego....',
-    '....oggggggo....',
-    '.....ogmmgo.....',
-    '......oggo......',
-    '...oocccccco....',
-    '..ogcccccccgo...',
-    '..ogcoccbccogo..',
-    '.ogo.occccc.ogo.',
-    '.oGo.occccc.oGo.',
-    '.....occccc.....',
-    '.....occccco....',
-    '.....occCcco....',
-    '.....occ.cco....',
-    '.....occ.cco....',
-    '....ogg...ggo...',
-    '....ogg...ggo...',
-    '.....ogo.oggo...',
-    '....oggo..ogo...',
-    '....ogg...oggo..',
-    '....oGG...oGGo..',
-    '................',
-    '................',
-]
+// ---- abstract bloody walls, generated at load — never the same twice ----
+function makeBloodWall(intense) {
+    const S = 32
+    const c = document.createElement('canvas')
+    c.width = S
+    c.height = S
+    const ctx = c.getContext('2d')
+    const img = ctx.createImageData(S, S)
+    for (let i = 0; i < img.data.length; i += 4) {
+        const v = Math.random()
+        img.data[i] = (intense ? 14 : 24) + v * (intense ? 36 : 26)
+        img.data[i + 1] = 3 + v * 7
+        img.data[i + 2] = 3 + v * 6
+        img.data[i + 3] = 255
+    }
+    ctx.putImageData(img, 0, 0)
+    // organic blotches
+    for (let i = 0; i < (intense ? 11 : 7); i++) {
+        const x = Math.random() * S | 0
+        const y = Math.random() * S | 0
+        const rw = 2 + Math.random() * 7 | 0
+        const rh = 2 + Math.random() * 5 | 0
+        ctx.fillStyle = Math.random() < 0.5
+            ? 'rgba(0,0,0,0.55)'
+            : `rgba(${95 + Math.random() * 70 | 0},10,6,0.5)`
+        ctx.fillRect(x, y, rw, rh)
+        ctx.fillRect(x + 1, y - 1, Math.max(rw - 2, 1), rh + 2)
+    }
+    // drips running down, brighter at the head
+    for (let i = 0; i < (intense ? 8 : 5); i++) {
+        const x = Math.random() * S | 0
+        const len = 6 + Math.random() * (S - 6) | 0
+        const bright = intense ? 150 : 115
+        ctx.fillStyle = `rgba(${bright},12,8,0.75)`
+        ctx.fillRect(x, 0, 1, len)
+        ctx.fillStyle = `rgba(${bright + 45},22,12,0.9)`
+        ctx.fillRect(x, len - 2, 1, 2)
+    }
+    // sinew lines
+    for (let i = 0; i < 3; i++) {
+        ctx.fillStyle = 'rgba(60,6,4,0.6)'
+        ctx.fillRect(0, Math.random() * S | 0, S, 1)
+    }
+    return c
+}
 
-const ZOMBIE_ATTACK = [
-    '................',
-    '.....oooooo.....',
-    '....oggggggo....',
-    '....ogGggGgo....',
-    '....oeeggeeo....',
-    '....oggggggo....',
-    '.....ommmmo.....',
-    '......oggo......',
-    '..oGGoccccoGGo..',
-    '..oggccccccggo..',
-    '..oggocbbcoggo..',
-    '..ooo.ccccc.ooo.',
-    '......ccccc.....',
-    '.....occccco....',
-    '.....occCcco....',
-    '.....occbcco....',
-    '.....occ.cco....',
-    '.....occ.cco....',
-    '....ogg...ggo...',
-    '....ogg...ggo...',
-    '....oggo.oggo...',
-    '....oggo.oggo...',
-    '....oggo..ggo...',
-    '....oGGo..GGo...',
-    '................',
-    '................',
-]
+// variant pools: the view flickers between these so nothing ever holds still
+export function makeBloodWallSet() {
+    const mk = (intense, n) => Array.from({ length: n }, () => makeBloodWall(intense))
+    return { normal: mk(false, 3), other: mk(true, 3) }
+}
 
 const GUN_PALETTE = {
     'o': '#05070a', // outline
@@ -223,31 +230,6 @@ function makeSplatSprite() {
     return c
 }
 
-// otherworld wall: rusted, darkened, streaked with old blood running from the top
-export function makeOtherworldTexture(img) {
-    const c = document.createElement('canvas')
-    c.width = img.width
-    c.height = img.height
-    const ctx = c.getContext('2d')
-    ctx.drawImage(img, 0, 0)
-    ctx.globalCompositeOperation = 'source-atop'
-    ctx.fillStyle = 'rgba(20,4,2,0.55)' // deep rust darkening
-    ctx.fillRect(0, 0, c.width, c.height)
-    // decay splotches
-    for (let i = 0; i < 14; i++) {
-        ctx.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,0.5)' : 'rgba(70,18,8,0.6)'
-        ctx.fillRect(Math.random() * c.width | 0, Math.random() * c.height | 0,
-            1 + Math.random() * 3 | 0, 1 + Math.random() * 3 | 0)
-    }
-    // blood streaks running down
-    for (let i = 0; i < 4; i++) {
-        const x = Math.random() * c.width | 0
-        ctx.fillStyle = 'rgba(90,8,4,0.75)'
-        ctx.fillRect(x, 0, 1, 3 + Math.random() * (c.height - 3) | 0)
-    }
-    return c
-}
-
 // low-res screaming face for single-frame inserts — mostly shadow and mouth
 export function makeFace() {
     const c = document.createElement('canvas')
@@ -324,9 +306,6 @@ function dot(color) {
 }
 
 export const Sprites = {
-    zombieWalkA: makeSprite(ZOMBIE_WALK_A, ZOMBIE_PALETTE),
-    zombieWalkB: makeSprite(ZOMBIE_WALK_B, ZOMBIE_PALETTE),
-    zombieAttack: makeSprite(ZOMBIE_ATTACK, ZOMBIE_PALETTE),
     gunIdle: makeSprite(GUN_IDLE, GUN_PALETTE),
     gunRecoil: makeSprite(GUN_RECOIL, GUN_PALETTE),
     muzzleFlash: makeMuzzleFlash(),
@@ -336,6 +315,6 @@ export const Sprites = {
     particleRed: dot('#7a1616'),
 }
 
-Sprites.zombieWalkAFlash = flashVariant(Sprites.zombieWalkA)
-Sprites.zombieWalkBFlash = flashVariant(Sprites.zombieWalkB)
-Sprites.zombieAttackFlash = flashVariant(Sprites.zombieAttack)
+Sprites.entityIdle = Array.from({ length: 8 }, () => makeEntityVariant(false))
+Sprites.entityAttack = Array.from({ length: 4 }, () => makeEntityVariant(true))
+Sprites.entityFlash = flashVariant(Sprites.entityIdle[0])
