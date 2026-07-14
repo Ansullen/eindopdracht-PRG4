@@ -6,6 +6,7 @@ export const WorldFX = {
     events: [],
     particles: [],
     splats: [],
+    otherworld: false, // set by the view's shift cycle; zombies read it for speed
 
     emit(type, data) {
         this.events.push({ type, data })
@@ -55,5 +56,6 @@ export const WorldFX = {
         this.events = []
         this.particles = []
         this.splats = []
+        this.otherworld = false
     },
 }

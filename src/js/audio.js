@@ -10,6 +10,8 @@ class SfxEngine {
     #staticGain = null
     #droneGain = null
     #bedGain = null      // duckable group for ambient
+    #dread = 0
+    #otherworld = false
     onCrackle = null     // hook: view adds a tiny trauma flicker per crackle
 
     init() {
@@ -37,6 +39,8 @@ class SfxEngine {
 
         this.#startAmbient()
         this.#scheduleCrackle()
+        this.#scheduleDreadNoises()
+        this.#scheduleHeartbeat()
     }
 
     get ready() { return !!this.#ctx }
@@ -115,10 +119,157 @@ class SfxEngine {
         setTimeout(tick, 3000 + Math.random() * 5000)
     }
 
-    // trauma+dread 0..1 — static bed volume
+    // trauma+dread 0..1 — static bed volume; also drives the heartbeat scheduler
     setDread(level) {
         if (!this.#ctx) return
+        this.#dread = level
         this.#staticGain.gain.setTargetAtTime(0.015 + level * 0.06, this.#ctx.currentTime, 0.15)
+    }
+
+    setOtherworld(on) {
+        this.#otherworld = on
+        if (this.#ctx) {
+            // the room hums louder and wrong on the other side
+            this.#droneGain.gain.setTargetAtTime(on ? 0.14 : 0.08, this.#ctx.currentTime, 0.8)
+        }
+    }
+
+    // slow air-raid siren, two detuned saws through an echo — the shift signal
+    siren() {
+        if (!this.#ctx) return
+        const ctx = this.#ctx
+        const t = ctx.currentTime
+        const lp = ctx.createBiquadFilter()
+        lp.type = 'lowpass'
+        lp.frequency.value = 1100
+        const g = ctx.createGain()
+        g.gain.setValueAtTime(0.0001, t)
+        g.gain.linearRampToValueAtTime(0.16, t + 1.2)
+        g.gain.setValueAtTime(0.16, t + 7)
+        g.gain.linearRampToValueAtTime(0.0001, t + 9)
+
+        const delay = ctx.createDelay(1)
+        delay.delayTime.value = 0.31
+        const fb = ctx.createGain()
+        fb.gain.value = 0.4
+        delay.connect(fb).connect(delay)
+        g.connect(this.#comp)
+        g.connect(delay)
+        delay.connect(this.#comp)
+
+        for (const det of [0, 4]) {
+            const o = ctx.createOscillator()
+            o.type = 'sawtooth'
+            o.frequency.setValueAtTime(360 + det, t)
+            o.frequency.linearRampToValueAtTime(760 + det, t + 2.2)
+            o.frequency.linearRampToValueAtTime(400 + det, t + 4.5)
+            o.frequency.linearRampToValueAtTime(740 + det, t + 6.7)
+            o.frequency.linearRampToValueAtTime(360 + det, t + 9)
+            o.connect(lp)
+            o.start(t)
+            o.stop(t + 9.1)
+        }
+        lp.connect(g)
+    }
+
+    #clang() {
+        const ctx = this.#ctx
+        const t = ctx.currentTime
+        const noise = this.#noise()
+        const bp = ctx.createBiquadFilter()
+        bp.type = 'bandpass'
+        bp.frequency.value = 250 + Math.random() * 700
+        bp.Q.value = 18
+        const g = ctx.createGain()
+        this.#env(g, t, 0.12 * (this.#otherworld ? 1.6 : 1), 0.8)
+        noise.connect(bp).connect(g).connect(this.#out(Math.random() * 2 - 1))
+        noise.start(t)
+        noise.stop(t + 0.9)
+    }
+
+    #whisper() {
+        const ctx = this.#ctx
+        const base = ctx.currentTime
+        const out = this.#out(Math.random() * 1.6 - 0.8)
+        let dt = 0
+        const syllables = 4 + Math.floor(Math.random() * 5)
+        for (let i = 0; i < syllables; i++) {
+            const t = base + dt
+            const dur = 0.06 + Math.random() * 0.09
+            const noise = this.#noise()
+            const bp = ctx.createBiquadFilter()
+            bp.type = 'bandpass'
+            bp.frequency.value = 1200 + Math.random() * 900
+            bp.Q.value = 4
+            const g = ctx.createGain()
+            this.#env(g, t, 0.05, dur)
+            noise.connect(bp).connect(g).connect(out)
+            noise.start(t)
+            noise.stop(t + dur + 0.03)
+            dt += dur + 0.02 + Math.random() * 0.05
+        }
+    }
+
+    #scream() {
+        const ctx = this.#ctx
+        const t = ctx.currentTime
+        const o = ctx.createOscillator()
+        o.type = 'sawtooth'
+        o.frequency.setValueAtTime(850 + Math.random() * 200, t)
+        o.frequency.exponentialRampToValueAtTime(280, t + 1.2)
+        const vib = ctx.createOscillator()
+        vib.frequency.value = 11
+        const vibG = ctx.createGain()
+        vibG.gain.value = 30
+        vib.connect(vibG).connect(o.frequency)
+        const hp = ctx.createBiquadFilter()
+        hp.type = 'highpass'
+        hp.frequency.value = 500
+        const g = ctx.createGain()
+        g.gain.setValueAtTime(0.0001, t)
+        g.gain.linearRampToValueAtTime(0.06, t + 0.15)
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2)
+        o.connect(hp).connect(g).connect(this.#out(Math.random() * 2 - 1))
+        o.start(t)
+        o.stop(t + 1.3)
+        vib.start(t)
+        vib.stop(t + 1.3)
+    }
+
+    // distant industrial horror: clangs, whispers, the occasional scream
+    #scheduleDreadNoises() {
+        const tick = () => {
+            if (this.#ctx) {
+                const r = Math.random()
+                if (r < 0.5) this.#clang()
+                else if (r < 0.8) this.#whisper()
+                else if (r < 0.9) this.#scream()
+            }
+            const base = this.#otherworld ? 4000 : 9000
+            setTimeout(tick, base + Math.random() * (this.#otherworld ? 6000 : 14000))
+        }
+        setTimeout(tick, 8000)
+    }
+
+    // audible lub-dub once dread crosses 0.4, tightening as it rises
+    #scheduleHeartbeat() {
+        const tick = () => {
+            if (this.#ctx && this.#dread > 0.4) {
+                const t = this.#ctx.currentTime
+                for (const [dt, vol] of [[0, 0.3], [0.14, 0.2]]) {
+                    const o = this.#ctx.createOscillator()
+                    o.frequency.value = 52
+                    const g = this.#ctx.createGain()
+                    this.#env(g, t + dt, vol, 0.1)
+                    o.connect(g).connect(this.#comp)
+                    o.start(t + dt)
+                    o.stop(t + dt + 0.15)
+                }
+            }
+            const rate = this.#dread > 0.4 ? 1100 - this.#dread * 600 : 500
+            setTimeout(tick, rate)
+        }
+        setTimeout(tick, 1000)
     }
 
     #duckBed() {
@@ -220,12 +371,12 @@ class SfxEngine {
         if (!this.#ctx) return
         const ctx = this.#ctx
         const t = ctx.currentTime
-        const f0 = 55 + Math.random() * 25
+        const f0 = 38 + Math.random() * 22
         const out = this.#out(pan)
 
         const lp = ctx.createBiquadFilter()
         lp.type = 'lowpass'
-        lp.frequency.value = 400
+        lp.frequency.value = 290
         lp.Q.value = 0.7
         const g = ctx.createGain()
         g.gain.setValueAtTime(0.0001, t)

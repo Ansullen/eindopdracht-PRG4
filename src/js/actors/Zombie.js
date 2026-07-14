@@ -117,7 +117,8 @@ export class Zombie extends Actor {
 
         if (this.#aggroT > 0 && dist > 1) {
             this.state = 'chase'
-            this.vel = vec((dx / dist) * SPEED, (dy / dist) * SPEED)
+            const speed = SPEED * (WorldFX.otherworld ? 1.3 : 1) // they run on the other side
+            this.vel = vec((dx / dist) * speed, (dy / dist) * speed)
             this.#nextGroanIn -= delta
             if (this.#nextGroanIn <= 0) {
                 Sfx.groan(this.#pan(), 1 - this.#dist01() * 0.8)

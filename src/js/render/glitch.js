@@ -4,9 +4,14 @@
 // (damage/kill/key/death/win) — 4 low-HP corruption — 5 rare micro-glitches.
 // All overlays are pre-baked at load; the per-frame cost is drawImage/fillRect only.
 
+import { makeFace } from './pixelart.js'
+import { drawText, textWidth } from './font.js'
+
 const TAU = Math.PI * 2
 
 function lerp(a, b, t) { return a + (b - a) * t }
+
+const SCRAWLS = ['BEHIND YOU', 'IT SEES YOU', 'DONT LOOK', 'YOUR FAULT', 'HELP ME', 'STAY', 'NO EXIT', 'IT WEARS YOU']
 
 export class GlitchFX {
     trauma = 0
@@ -28,6 +33,11 @@ export class GlitchFX {
     #syncX = 160
     #suppressMicroT = 0
     #judderFlip = false
+    #shiftT = 0        // otherworld transition burst
+    #faceFrames = 0    // single-frame face inserts
+    #dipFrames = 0     // flashlight brown-out
+    #flashAlpha = 0.92 // flashlight flicker random walk
+    otherworld = false
 
     constructor(w, h) {
         this.w = w
@@ -41,6 +51,7 @@ export class GlitchFX {
         this.chroma.width = w
         this.chroma.height = h
         this.chromaCtx = this.chroma.getContext('2d')
+        this.face = makeFace()
         this.#bake()
     }
 
@@ -143,6 +154,19 @@ export class GlitchFX {
             back,                  // back: full radial
             edge(60, 0, 0, 0),     // left
         ]
+
+        // flashlight cone: heavy darkness closing in from the edges
+        const fl = document.createElement('canvas')
+        fl.width = w
+        fl.height = h
+        const flc = fl.getContext('2d')
+        const fgrad = flc.createRadialGradient(w / 2, h / 2, h * 0.28, w / 2, h / 2, w * 0.55)
+        fgrad.addColorStop(0, 'rgba(0,0,0,0)')
+        fgrad.addColorStop(0.6, 'rgba(0,0,0,0.35)')
+        fgrad.addColorStop(1, 'rgba(0,0,0,0.82)')
+        flc.fillStyle = fgrad
+        flc.fillRect(0, 0, w, h)
+        this.flashlight = fl
     }
 
     // ---- events ----
@@ -155,7 +179,14 @@ export class GlitchFX {
         this.#killT = 0
         this.#rewindT = 0
         this.#suppressMicroT = 3000
+        if (Math.random() < 0.35) this.#faceFrames = 2 // sometimes it looks back
         this.addTrauma(0.5)
+    }
+
+    // otherworld transition burst (call alongside the siren)
+    onShift() {
+        this.#shiftT = 1400
+        this.addTrauma(0.6)
     }
 
     onKill() {
@@ -179,12 +210,23 @@ export class GlitchFX {
     get winElapsed() { return this.#winT }
 
     // ---- per-frame ----
-    update(dt, { proximity = 0, hpFrac = 1, turning = false } = {}) {
+    update(dt, { proximity = 0, hpFrac = 1, turning = false, otherworld = false } = {}) {
         this.trauma = Math.max(0, this.trauma - 1.5 * (dt / 1000))
         this.proximity = proximity
         this.lowHp = hpFrac < 0.4 ? 1 - hpFrac / 0.4 : 0
         this.turning = turning
+        this.otherworld = otherworld
 
+        // flashlight flicker: random walk, occasional brown-out
+        this.#flashAlpha = Math.max(0.75, Math.min(1,
+            this.#flashAlpha + (Math.random() - 0.5) * 0.16))
+        if (this.#dipFrames === 0 && Math.random() < (otherworld ? 0.012 : 0.005)) {
+            this.#dipFrames = 1 + Math.floor(Math.random() * 3)
+        }
+        // in the otherworld, it sometimes just appears for one frame
+        if (otherworld && this.#faceFrames === 0 && Math.random() < 0.0012) this.#faceFrames = 1
+
+        if (this.#shiftT > 0) this.#shiftT -= dt
         if (this.#damageT > 0) this.#damageT -= dt
         if (this.#killT > 0) this.#killT -= dt
         if (this.#rewindT > 0) this.#rewindT -= dt
@@ -241,8 +283,8 @@ export class GlitchFX {
         if (!rewindClean) {
             const n = this.proximity
 
-            // proximity + ambient tears
-            if (Math.random() < 0.06 + 0.35 * n * n) {
+            // proximity + ambient tears (the picture barely holds on the other side)
+            if (Math.random() < (this.otherworld ? 0.14 : 0.06) + 0.35 * n * n) {
                 const k = 1 + Math.floor(3 * n)
                 for (let i = 0; i < k; i++) {
                     this.#tear(ctx, 2 + Math.random() * 8, (Math.random() < 0.5 ? -1 : 1) * (1 + 7 * n))
@@ -331,6 +373,23 @@ export class GlitchFX {
                 ctx.globalCompositeOperation = 'source-over'
             }
 
+            // otherworld shift burst: static wall + strobing negative while the siren wails
+            if (this.#shiftT > 0) {
+                const e = this.#shiftT / 1400
+                ctx.globalAlpha = 0.5 * e
+                ctx.drawImage(this.static, 0, 0)
+                ctx.globalAlpha = 1
+                for (let i = 0; i < 4; i++) {
+                    this.#tear(ctx, 3 + Math.random() * 10, (Math.random() * 2 - 1) * 14 * e)
+                }
+                if (Math.random() < 0.12 * e) {
+                    ctx.globalCompositeOperation = 'difference'
+                    ctx.fillStyle = 'rgba(230,230,230,0.8)'
+                    ctx.fillRect(0, 0, w, h)
+                    ctx.globalCompositeOperation = 'source-over'
+                }
+            }
+
             // rewind grab (key pickup)
             if (this.#rewindT > 100) {
                 ctx.globalAlpha = 0.3 * ((this.#rewindT - 100) / 450)
@@ -385,6 +444,34 @@ export class GlitchFX {
                 -Math.floor(Math.random() * 32), -Math.floor(Math.random() * 16), 352, 192)
             ctx.globalCompositeOperation = 'source-over'
         }
+
+        // single-frame inserts: the face, or words scratched into the frame
+        if (this.#faceFrames > 0) {
+            this.#faceFrames--
+            const fh = h * 0.75
+            const fw = fh * (this.face.width / this.face.height)
+            ctx.globalAlpha = 0.55
+            ctx.drawImage(this.face,
+                (w - fw) / 2 + (Math.random() * 2 - 1) * 10,
+                (h - fh) / 2 + (Math.random() * 2 - 1) * 6, fw, fh)
+            ctx.globalAlpha = 1
+        } else if (Math.random() < (this.otherworld ? 0.002 : 0.0005)) {
+            const word = SCRAWLS[Math.floor(Math.random() * SCRAWLS.length)]
+            const scale = 2 + Math.floor(Math.random() * 2)
+            drawText(ctx, word,
+                Math.random() * Math.max(1, w - textWidth(word, scale)),
+                20 + Math.random() * (h - 40), 'rgba(200,30,20,0.75)', scale)
+        }
+
+        // flashlight cone with a failing bulb
+        if (this.#dipFrames > 0) {
+            this.#dipFrames--
+            ctx.fillStyle = 'rgba(0,0,0,0.55)'
+            ctx.fillRect(0, 0, w, h)
+        }
+        ctx.globalAlpha = this.#flashAlpha
+        ctx.drawImage(this.flashlight, 0, 0)
+        ctx.globalAlpha = 1
 
         // phosphor mask (always, even in the clean window — it's the monitor, not the tape)
         const crawl = Math.floor(now / 90) % 3

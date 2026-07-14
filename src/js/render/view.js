@@ -6,7 +6,7 @@
 import { ScreenElement, Canvas, ImageFiltering, vec } from 'excalibur'
 import { Raycaster, makeCamera } from './raycaster.js'
 import { GlitchFX } from './glitch.js'
-import { Sprites, makeCorruptTexture } from './pixelart.js'
+import { Sprites, makeCorruptTexture, makeOtherworldTexture } from './pixelart.js'
 import { drawDeathCard, drawWinCard } from './osd.js'
 import { WorldFX } from './worldfx.js'
 import { Res } from '../resources.js'
@@ -31,6 +31,12 @@ export class RaycastView extends ScreenElement {
     #glitch
     #wallTex
     #corruptTex
+    #otherTex
+
+    // otherworld state: the siren drags the corridor to the other side and back
+    #otherworld = false
+    #owTimer = 35000 + Math.random() * 25000
+    #owRemaining = 0
 
     // gun + crosshair state (mutated in onPostUpdate, read in draw)
     #bobPhase = 0
@@ -71,6 +77,7 @@ export class RaycastView extends ScreenElement {
         wt.getContext('2d').drawImage(Res.wall.image, 0, 0)
         this.#wallTex = wt
         this.#corruptTex = makeCorruptTexture(wt)
+        this.#otherTex = makeOtherworldTexture(wt)
 
         Sfx.onCrackle = () => this.#glitch.addTrauma(0.05)
 
@@ -149,10 +156,22 @@ export class RaycastView extends ScreenElement {
         this.#turning = turnRate > 2
         this.#lastAngle = p.angle
 
+        // otherworld shifts: siren, burst, world decays; then it lets you back
+        if (!p.dead && !p.won) {
+            if (this.#otherworld) {
+                this.#owRemaining -= delta
+                if (this.#owRemaining <= 0) this.#setOtherworld(false)
+            } else {
+                this.#owTimer -= delta
+                if (this.#owTimer <= 0) this.#setOtherworld(true)
+            }
+        }
+
         this.#glitch.update(delta, {
             proximity: this.#proximity,
             hpFrac: p.hp / 100,
             turning: this.#turning,
+            otherworld: this.#otherworld,
         })
         Sfx.setDread(Math.max(this.#glitch.trauma * 0.8, this.#proximity * 0.6))
 
@@ -176,6 +195,16 @@ export class RaycastView extends ScreenElement {
         if (this.#spreadT > 0) this.#spreadT -= delta
     }
 
+    #setOtherworld(on) {
+        this.#otherworld = on
+        WorldFX.otherworld = on
+        Sfx.setOtherworld(on)
+        Sfx.siren()
+        this.#glitch.onShift()
+        if (on) this.#owRemaining = 22000 + Math.random() * 12000
+        else this.#owTimer = 45000 + Math.random() * 35000
+    }
+
     #collectSprites(now) {
         const p = this.#player
         const sprites = []
@@ -196,7 +225,12 @@ export class RaycastView extends ScreenElement {
                     else if (img === Sprites.zombieWalkB) img = Sprites.zombieWalkBFlash
                     else img = Sprites.zombieWalkAFlash
                 }
-                sprites.push({ x: a.pos.x / TILE, y: a.pos.y / TILE, img, scale: 0.8, vShift: 0.2 })
+                // body-horror jitter: single-frame stretches while it moves
+                let scale = 0.8
+                if (a.state !== 'idle' && Math.random() < 0.07) {
+                    scale += (Math.random() - 0.3) * 0.14
+                }
+                sprites.push({ x: a.pos.x / TILE, y: a.pos.y / TILE, img, scale, vShift: 1 - scale })
             } else if (a instanceof AmmoPickup || a instanceof Key) {
                 const isKey = a instanceof Key
                 const bob = Math.sin(now * 0.00754 + a.id * 2.1) * 0.05
@@ -285,15 +319,23 @@ export class RaycastView extends ScreenElement {
         const speed = Math.min(p.vel.magnitude / MAX_SPEED, 1)
         const horizon = H / 2 + Math.abs(Math.sin(this.#bobPhase)) * 2 * speed
         const lightPop = this.#flashT > 40 ? 0.25 : 0
-        const corruption = 0.015 + this.#glitch.lowHp * 0.08 + (this.#glitch.trauma > 0.5 ? 0.1 : 0)
+        const ow = this.#otherworld
+        const corruption = 0.015 + (ow ? 0.06 : 0)
+            + this.#glitch.lowHp * 0.08 + (this.#glitch.trauma > 0.5 ? 0.1 : 0)
+        const fogDist = ow ? 3.8 : 6
+        const wobble = ow ? 1.3 : (this.#proximity > 0.6 ? 0.5 : 0)
 
         const cam = makeCamera(p.pos.x / TILE, p.pos.y / TILE, p.angle, FOV)
-        this.#raycaster.renderWalls(b, Level, cam, this.#wallTex, horizon, {
+        this.#raycaster.renderWalls(b, Level, cam, ow ? this.#otherTex : this.#wallTex, horizon, {
             lightPop,
             corruption,
             corruptTex: this.#corruptTex,
+            fogDist,
+            wobble,
+            now,
+            otherworld: ow,
         })
-        this.#raycaster.renderSprites(b, this.#collectSprites(now), cam, horizon, lightPop)
+        this.#raycaster.renderSprites(b, this.#collectSprites(now), cam, horizon, lightPop, fogDist)
         this.#drawGun(b, now)
 
         if (this.#tint && this.#tint.until > now) {
@@ -308,11 +350,19 @@ export class RaycastView extends ScreenElement {
         if (this.#glitch.dying) drawDeathCard(b, W, H, this.#glitch.deathElapsed)
         if (this.#glitch.winning) drawWinCard(b, W, H, this.#glitch.winElapsed, this.#playMsAtEnd)
 
-        // final blit with shake/judder; black behind so shake shows tracking edges
+        // final blit with shake/judder + a slow sickening camera roll
         const off = this.#glitch.blitOffset()
+        const roll = ow
+            ? Math.sin(now * 0.0008) * 0.028
+            : Math.sin(now * 0.0005) * 0.008 * (0.3 + this.#proximity)
         ctx.imageSmoothingEnabled = false
         ctx.fillStyle = '#020402'
         ctx.fillRect(0, 0, W, H)
-        ctx.drawImage(this.#buffer, off.x, off.y)
+        ctx.save()
+        ctx.translate(W / 2, H / 2)
+        ctx.rotate(roll)
+        ctx.scale(1.03, 1.03)
+        ctx.drawImage(this.#buffer, -W / 2 + off.x, -H / 2 + off.y)
+        ctx.restore()
     }
 }

@@ -1,12 +1,12 @@
 // Wolfenstein-style raycast renderer (Lodev DDA) drawing into a low-res 2D canvas.
 // Coordinates are in tile units. The camera is { x, y, dirX, dirY, planeX, planeY }.
 
-export const FOG_NEAR = 1.5 // tiles at full brightness
-export const FOG_DIST = 8   // tiles until full darkness
+export const FOG_DIST = 6 // default tiles until full darkness
 
-// quantized to 8 bands for chunky retro banding
-function fogAt(dist) {
-    const f = Math.min(Math.max((dist - FOG_NEAR) / (FOG_DIST - FOG_NEAR), 0), 1)
+// quantized to 8 bands for chunky retro banding; near = full brightness zone
+function fogAt(dist, fogDist = FOG_DIST) {
+    const near = fogDist * 0.2
+    const f = Math.min(Math.max((dist - near) / (fogDist - near), 0), 1)
     return Math.floor(f * 8) / 8
 }
 
@@ -95,6 +95,9 @@ export class Raycaster {
         }
         this.ceilGrad = mk([[0, '#160505'], [0.5, '#070202'], [1, '#000000']])
         this.floorGrad = mk([[0, '#000000'], [0.5, '#130505'], [1, '#250907']])
+        // otherworld: rusted metal grating dark, blood-brown floor
+        this.ceilGradOW = mk([[0, '#0d0302'], [0.5, '#040101'], [1, '#000000']])
+        this.floorGradOW = mk([[0, '#000000'], [0.5, '#1c0503'], [1, '#3a0c05']])
     }
 
     // camera in tile units; horizon = h/2 + bob/shake offset
@@ -102,12 +105,17 @@ export class Raycaster {
         const { w, h, zbuf } = this
         const corruption = opts.corruption ?? 0
         const corruptTex = opts.corruptTex ?? wallTex
+        const fogDist = opts.fogDist ?? FOG_DIST
+        const wobble = opts.wobble ?? 0 // px — the walls breathe
+        const wobbleT = opts.now ?? 0
 
         ctx.imageSmoothingEnabled = false
 
         // ceiling & floor (stretched cached gradients around the horizon)
-        ctx.drawImage(this.ceilGrad, 0, 0, 1, this.h, 0, horizon - h, w, h)
-        ctx.drawImage(this.floorGrad, 0, 0, 1, this.h, 0, horizon, w, h)
+        const ceil = opts.otherworld ? this.ceilGradOW : this.ceilGrad
+        const floor = opts.otherworld ? this.floorGradOW : this.floorGrad
+        ctx.drawImage(ceil, 0, 0, 1, this.h, 0, horizon - h, w, h)
+        ctx.drawImage(floor, 0, 0, 1, this.h, 0, horizon, w, h)
 
         const texW = wallTex.width
         const texH = wallTex.height
@@ -121,7 +129,10 @@ export class Raycaster {
             zbuf[x] = hit.dist
 
             const lineH = h / hit.dist
-            const drawStart = horizon - lineH / 2
+            let drawStart = horizon - lineH / 2
+            if (wobble > 0) {
+                drawStart += Math.sin(x * 0.32 + wobbleT * 0.004) * wobble
+            }
 
             const tex = (corruption > 0 && Math.random() < corruption) ? corruptTex : wallTex
             let texX = Math.floor(hit.wallX * texW)
@@ -132,7 +143,7 @@ export class Raycaster {
             ctx.drawImage(tex, texX, 0, 1, texH, x, drawStart, 1, lineH)
 
             // distance fog + N/S vs E/W face shading, one overlay rect per column
-            let shade = fogAt(hit.dist)
+            let shade = fogAt(hit.dist, fogDist)
             if (hit.side === 1) shade += 0.3 * (1 - shade)
             shade = Math.max(0, Math.min(shade, 1) - (opts.lightPop ?? 0))
             if (shade > 0.02) {
@@ -144,7 +155,7 @@ export class Raycaster {
 
     // sprites: [{ x, y (tile units), img (canvas), scale (1 = wall height),
     //             vShift (0..1 down from center), alpha, glow (halves fog dimming) }]
-    renderSprites(ctx, sprites, cam, horizon, lightPop = 0) {
+    renderSprites(ctx, sprites, cam, horizon, lightPop = 0, fogDist = FOG_DIST) {
         const { w, h, zbuf } = this
         const invDet = 1 / (cam.planeX * cam.dirY - cam.dirX * cam.planeY)
 
@@ -171,7 +182,7 @@ export class Raycaster {
             const endX = Math.ceil(screenX + spriteW / 2)
             if (endX < 0 || startX >= w) continue
 
-            let fog = fogAt(ty)
+            let fog = fogAt(ty, fogDist)
             if (s.glow) fog *= 0.5
             fog = Math.max(0, fog - lightPop)
             ctx.globalAlpha = (s.alpha ?? 1) * (1 - fog * 0.92)

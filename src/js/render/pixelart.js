@@ -223,7 +223,67 @@ function makeSplatSprite() {
     return c
 }
 
-// glitched variant of the wall texture: row slices shifted + green channel pushed
+// otherworld wall: rusted, darkened, streaked with old blood running from the top
+export function makeOtherworldTexture(img) {
+    const c = document.createElement('canvas')
+    c.width = img.width
+    c.height = img.height
+    const ctx = c.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    ctx.globalCompositeOperation = 'source-atop'
+    ctx.fillStyle = 'rgba(20,4,2,0.55)' // deep rust darkening
+    ctx.fillRect(0, 0, c.width, c.height)
+    // decay splotches
+    for (let i = 0; i < 14; i++) {
+        ctx.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,0.5)' : 'rgba(70,18,8,0.6)'
+        ctx.fillRect(Math.random() * c.width | 0, Math.random() * c.height | 0,
+            1 + Math.random() * 3 | 0, 1 + Math.random() * 3 | 0)
+    }
+    // blood streaks running down
+    for (let i = 0; i < 4; i++) {
+        const x = Math.random() * c.width | 0
+        ctx.fillStyle = 'rgba(90,8,4,0.75)'
+        ctx.fillRect(x, 0, 1, 3 + Math.random() * (c.height - 3) | 0)
+    }
+    return c
+}
+
+// low-res screaming face for single-frame inserts — mostly shadow and mouth
+export function makeFace() {
+    const c = document.createElement('canvas')
+    c.width = 48
+    c.height = 64
+    const ctx = c.getContext('2d')
+    // head shadow
+    ctx.fillStyle = '#1a0d0b'
+    ctx.fillRect(8, 4, 32, 52)
+    ctx.fillRect(4, 12, 40, 36)
+    // gaunt cheek highlights, asymmetric
+    ctx.fillStyle = '#3d2420'
+    ctx.fillRect(10, 14, 10, 22)
+    ctx.fillRect(29, 12, 9, 26)
+    // hollow eyes, uneven
+    ctx.fillStyle = '#000000'
+    ctx.fillRect(12, 18, 9, 10)
+    ctx.fillRect(28, 16, 10, 12)
+    ctx.fillStyle = '#c9b8b4'
+    ctx.fillRect(16, 22, 2, 2)
+    ctx.fillRect(33, 21, 2, 2)
+    // screaming mouth, torn wide
+    ctx.fillStyle = '#000000'
+    ctx.fillRect(17, 36, 14, 18)
+    ctx.fillRect(14, 40, 20, 10)
+    ctx.fillStyle = '#5a0f08'
+    ctx.fillRect(19, 50, 10, 4)
+    // noise speckle so it reads as a corrupted frame, not a drawing
+    for (let i = 0; i < 160; i++) {
+        ctx.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,0.7)' : 'rgba(120,30,20,0.35)'
+        ctx.fillRect(Math.random() * 48 | 0, Math.random() * 64 | 0, 1, 1)
+    }
+    return c
+}
+
+// glitched variant of the wall texture: row slices shifted + red channel pushed
 export function makeCorruptTexture(img) {
     const c = document.createElement('canvas')
     c.width = img.width
