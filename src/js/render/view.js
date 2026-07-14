@@ -37,16 +37,11 @@ export class RaycastView extends ScreenElement {
     #owTimer = 35000 + Math.random() * 25000
     #owRemaining = 0
 
-    // gun + crosshair state (mutated in onPostUpdate, read in draw)
+    // view-feel state (mutated in onPostUpdate, read in draw)
     #bobPhase = 0
     #lastStepHalf = 0
     #stepSide = 1
-    #recoilT = 0
-    #flashT = 0
-    #dipT = 0
-    #hitT = 0
-    #killMarkT = 0
-    #spreadT = 0
+    #flashT = 0 // muzzle light pop on the world — no gun is drawn
     #tint = null
     #playMs = 0
     #playMsAtEnd = 0
@@ -97,21 +92,16 @@ export class RaycastView extends ScreenElement {
         for (const evt of WorldFX.drain()) {
             switch (evt.type) {
                 case 'shoot':
-                    this.#recoilT = 160
                     this.#flashT = 80
-                    this.#spreadT = 80
                     this.#glitch.addTrauma(0.12)
                     break
                 case 'dry':
-                    this.#dipT = 80
                     this.#glitch.addTrauma(0.03)
                     break
                 case 'hit':
-                    this.#hitT = 100
                     Sfx.hitTick()
                     break
                 case 'kill':
-                    this.#killMarkT = 150
                     this.#glitch.onKill()
                     break
                 case 'damage':
@@ -181,12 +171,7 @@ export class RaycastView extends ScreenElement {
             Sfx.footstep(this.#stepSide)
         }
 
-        if (this.#recoilT > 0) this.#recoilT -= delta
         if (this.#flashT > 0) this.#flashT -= delta
-        if (this.#dipT > 0) this.#dipT -= delta
-        if (this.#hitT > 0) this.#hitT -= delta
-        if (this.#killMarkT > 0) this.#killMarkT -= delta
-        if (this.#spreadT > 0) this.#spreadT -= delta
     }
 
     #setOtherworld(on) {
@@ -257,53 +242,6 @@ export class RaycastView extends ScreenElement {
         return sprites
     }
 
-    #drawGun(b, now) {
-        const p = this.#player
-        if (p.dead) return
-
-        const scalePx = 4
-        const gunW = 24 * scalePx
-        const gunH = 20 * scalePx
-        const speed = Math.min(p.vel.magnitude / MAX_SPEED, 1)
-        const bobX = Math.sin(this.#bobPhase) * 3 * speed
-        const bobY = Math.abs(Math.sin(this.#bobPhase)) * 2 * speed
-            + Math.sin(now * 0.0025) * 1 * (1 - speed) // idle breathe
-        const recP = Math.max(this.#recoilT, 0) / 160
-        const dip = this.#dipT > 0 ? 1 : 0
-
-        const img = recP > 0.5 ? Sprites.gunRecoil : Sprites.gunIdle
-        const gx = Math.round(W / 2 - gunW / 2 + 22 + bobX + recP * 2)
-        const gy = Math.round(H - gunH + 6 + bobY + recP * 7 + dip)
-        b.drawImage(img, gx, gy, gunW, gunH)
-
-        if (this.#flashT > 0) {
-            const big = this.#flashT > 40
-            const fs = big ? 72 : 44
-            b.drawImage(Sprites.muzzleFlash, gx + gunW / 2 - fs / 2 - 5, gy - fs + 14, fs, fs)
-        }
-
-        // crosshair / hitmarker
-        const cx = W / 2, cy = H / 2
-        if (this.#hitT > 0 || this.#killMarkT > 0) {
-            const r = this.#killMarkT > 0 ? 3 : 2
-            b.fillStyle = '#cc2200'
-            for (let i = 1; i <= r; i++) {
-                b.fillRect(cx - i, cy - i, 1, 1)
-                b.fillRect(cx + i, cy - i, 1, 1)
-                b.fillRect(cx - i, cy + i, 1, 1)
-                b.fillRect(cx + i, cy + i, 1, 1)
-            }
-            b.fillRect(cx, cy, 1, 1)
-        } else {
-            const sp = this.#spreadT > 0 ? 1 : 0
-            b.fillStyle = 'rgba(223,159,150,0.6)'
-            b.fillRect(cx - 2 - sp, cy, 2, 1)
-            b.fillRect(cx + 1 + sp, cy, 2, 1)
-            b.fillRect(cx, cy - 2 - sp, 1, 2)
-            b.fillRect(cx, cy + 1 + sp, 1, 2)
-        }
-    }
-
     #render(ctx, engine) {
         const now = engine.clock.now()
         const p = this.#player
@@ -333,7 +271,6 @@ export class RaycastView extends ScreenElement {
             otherworld: ow,
         })
         this.#raycaster.renderSprites(b, this.#collectSprites(now), cam, horizon, lightPop, fogDist)
-        this.#drawGun(b, now)
 
         if (this.#tint && this.#tint.until > now) {
             b.globalCompositeOperation = 'screen'
