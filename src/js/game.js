@@ -12,7 +12,7 @@ export class Game extends Engine {
             height: 704,
             maxFps: 60,
             displayMode: DisplayMode.FitScreen,
-            backgroundColor: Color.fromHex('#050d05'),
+            backgroundColor: Color.fromHex('#0d0303'),
             pixelArt: true,
         })
 

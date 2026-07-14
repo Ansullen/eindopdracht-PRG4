@@ -2,7 +2,7 @@ import { Actor, CollisionType, Keys, vec } from 'excalibur'
 import { Bullet } from './Bullet.js'
 import { Sfx } from '../audio.js'
 import { WorldFX } from '../render/worldfx.js'
-import { showPopup, showEndOverlay } from '../ui/popup.js'
+import { showEndOverlay } from '../ui/popup.js'
 
 const FWD_SPEED = 140
 const BACK_SPEED = 100
@@ -102,14 +102,12 @@ export class Player extends Actor {
         this.reserveAmmo += amount
         Sfx.pickup()
         WorldFX.emit('pickup')
-        showPopup(`+${amount} AMMO`)
     }
 
     pickupKey() {
         this.hasKey = true
         Sfx.keyPickup()
         WorldFX.emit('key')
-        showPopup('KEY ACQUIRED', '#ffc83c')
     }
 
     win() {

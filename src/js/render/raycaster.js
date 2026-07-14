@@ -93,8 +93,8 @@ export class Raycaster {
             g.fillRect(0, 0, 1, this.h)
             return c
         }
-        this.ceilGrad = mk([[0, '#03130a'], [0.5, '#010603'], [1, '#000000']])
-        this.floorGrad = mk([[0, '#000000'], [0.5, '#061106'], [1, '#0c1f0e']])
+        this.ceilGrad = mk([[0, '#160505'], [0.5, '#070202'], [1, '#000000']])
+        this.floorGrad = mk([[0, '#000000'], [0.5, '#130505'], [1, '#250907']])
     }
 
     // camera in tile units; horizon = h/2 + bob/shake offset
@@ -136,7 +136,7 @@ export class Raycaster {
             if (hit.side === 1) shade += 0.3 * (1 - shade)
             shade = Math.max(0, Math.min(shade, 1) - (opts.lightPop ?? 0))
             if (shade > 0.02) {
-                ctx.fillStyle = `rgba(3,9,3,${shade})`
+                ctx.fillStyle = `rgba(12,3,3,${shade})`
                 ctx.fillRect(x, drawStart, 1, lineH)
             }
         }

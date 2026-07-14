@@ -28,7 +28,7 @@ export const WorldFX = {
                 z: 0.4 + Math.random() * 0.3, // 0 floor .. 1 ceiling
                 vz: (Math.random() - 0.2) * 1.2,
                 life: 500,
-                red: i >= 7,
+                red: i >= 4,
             })
         }
     },

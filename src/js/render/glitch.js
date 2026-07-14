@@ -36,6 +36,11 @@ export class GlitchFX {
         this.ghost.width = w
         this.ghost.height = h
         this.ghostCtx = this.ghost.getContext('2d')
+        // scratch canvas for the red channel-split ghost
+        this.chroma = document.createElement('canvas')
+        this.chroma.width = w
+        this.chroma.height = h
+        this.chromaCtx = this.chroma.getContext('2d')
         this.#bake()
     }
 
@@ -47,7 +52,7 @@ export class GlitchFX {
         sl.width = w
         sl.height = h + 3
         const slc = sl.getContext('2d')
-        slc.fillStyle = 'rgba(0,8,0,0.28)'
+        slc.fillStyle = 'rgba(10,0,0,0.3)'
         for (let y = 0; y < sl.height; y += 3) slc.fillRect(0, y, w, 1)
         this.scanlines = sl
 
@@ -57,8 +62,8 @@ export class GlitchFX {
         vg.height = h
         const vgc = vg.getContext('2d')
         const grad = vgc.createRadialGradient(w / 2, h / 2, h * 0.45, w / 2, h / 2, w * 0.62)
-        grad.addColorStop(0, 'rgba(2,8,2,0)')
-        grad.addColorStop(1, 'rgba(2,8,2,0.5)')
+        grad.addColorStop(0, 'rgba(10,2,2,0)')
+        grad.addColorStop(1, 'rgba(10,2,2,0.55)')
         vgc.fillStyle = grad
         vgc.fillRect(0, 0, w, h)
         this.vignette = vg
@@ -86,8 +91,8 @@ export class GlitchFX {
             for (let i = 0; i < img.data.length; i += 4) {
                 const r = Math.random()
                 if (r < 0.2) {
-                    img.data[i] = 160; img.data[i + 1] = 255; img.data[i + 2] = 176
-                    img.data[i + 3] = 10 + Math.random() * 16
+                    img.data[i] = 255; img.data[i + 1] = 140; img.data[i + 2] = 125
+                    img.data[i + 3] = 12 + Math.random() * 18
                 } else if (r < 0.3) {
                     img.data[i + 3] = 30
                 }
@@ -104,7 +109,7 @@ export class GlitchFX {
         const simg = stc.createImageData(w, h)
         for (let i = 0; i < simg.data.length; i += 4) {
             const v = Math.random() * 200
-            simg.data[i] = v * 0.8; simg.data[i + 1] = v; simg.data[i + 2] = v * 0.85
+            simg.data[i] = v; simg.data[i + 1] = v * 0.42; simg.data[i + 2] = v * 0.38
             simg.data[i + 3] = 255
         }
         stc.putImageData(simg, 0, 0)
@@ -191,12 +196,12 @@ export class GlitchFX {
         const eventActive = this.#damageT > 0 || this.#killT > 0 || this.#rewindT > 0
         // choke stutter: frame-freeze panic when a zombie is on top of you
         if (this.#chokeFrames === 0 && !eventActive && this.proximity > 0.7 &&
-            this.#chokeCooldown <= 0 && Math.random() < 0.012) {
+            this.#chokeCooldown <= 0 && Math.random() < 0.02) {
             this.#chokeFrames = 2 + Math.floor(Math.random() * 3)
             this.#chokeCooldown = 1500
         }
         // sync loss micro-glitch
-        if (this.#syncFrames === 0 && this.#suppressMicroT <= 0 && Math.random() < 0.0015) {
+        if (this.#syncFrames === 0 && this.#suppressMicroT <= 0 && Math.random() < 0.003) {
             this.#syncFrames = 4 + Math.floor(Math.random() * 4)
             this.#syncX = 60 + Math.floor(Math.random() * 200)
         }
@@ -236,34 +241,39 @@ export class GlitchFX {
         if (!rewindClean) {
             const n = this.proximity
 
-            // proximity tears
-            if (Math.random() < 0.02 + 0.3 * n * n) {
+            // proximity + ambient tears
+            if (Math.random() < 0.06 + 0.35 * n * n) {
                 const k = 1 + Math.floor(3 * n)
                 for (let i = 0; i < k; i++) {
                     this.#tear(ctx, 2 + Math.random() * 8, (Math.random() < 0.5 ? -1 : 1) * (1 + 7 * n))
                 }
             }
             // trauma tears
-            const traumaRows = Math.floor(this.trauma * 8)
+            const traumaRows = Math.floor(this.trauma * 10)
             for (let i = 0; i < traumaRows; i++) {
                 if (Math.random() < 0.5) this.#tear(ctx, 1 + Math.random() * 3, (Math.random() * 2 - 1) * 12 * this.trauma)
             }
-            // signal doubling at high trauma
-            if (this.trauma > 0.25) {
-                ctx.globalAlpha = 0.2
-                ctx.globalCompositeOperation = 'lighter'
-                ctx.drawImage(ctx.canvas, Math.round(this.trauma * 3), 0)
-                ctx.globalCompositeOperation = 'source-over'
-                ctx.globalAlpha = 1
-            }
+
+            // red channel-split ghost — always on, widens with trauma
+            const cc = this.chromaCtx
+            cc.globalCompositeOperation = 'source-over'
+            cc.drawImage(ctx.canvas, 0, 0)
+            cc.globalCompositeOperation = 'multiply'
+            cc.fillStyle = '#ff2418'
+            cc.fillRect(0, 0, w, h)
+            ctx.globalCompositeOperation = 'screen'
+            ctx.globalAlpha = 0.35
+            ctx.drawImage(this.chroma, 1 + Math.round(this.trauma * 4), 0)
+            ctx.globalCompositeOperation = 'source-over'
+            ctx.globalAlpha = 1
 
             // heartbeat blood pulse
-            if (n > 0.35) {
+            if (n > 0.2) {
                 const T = lerp(1100, 420, n)
                 const e = Math.pow(Math.max(0, Math.sin(TAU * now / T)), 8)
                 if (e > 0.01) {
                     ctx.globalCompositeOperation = 'screen'
-                    ctx.fillStyle = `rgba(204,34,0,${(0.02 + 0.1 * n) * e})`
+                    ctx.fillStyle = `rgba(204,34,0,${(0.03 + 0.12 * n) * e})`
                     ctx.fillRect(0, 0, w, h)
                     ctx.globalCompositeOperation = 'source-over'
                 }
@@ -279,7 +289,7 @@ export class GlitchFX {
                     ctx.drawImage(ctx.canvas, 0, y, w, bh, 3, y, w, bh)
                     ctx.fillStyle = 'rgba(0,0,0,0.18)'
                     ctx.fillRect(0, y, w, bh)
-                    ctx.fillStyle = 'rgba(190,255,200,0.10)'
+                    ctx.fillStyle = 'rgba(255,200,190,0.10)'
                     ctx.fillRect(0, y, w, 1)
                 }
             }
@@ -316,7 +326,7 @@ export class GlitchFX {
                     }
                 }
                 ctx.globalCompositeOperation = 'lighter'
-                ctx.fillStyle = `rgba(102,255,106,${0.1 * (this.#killT / 160)})`
+                ctx.fillStyle = `rgba(255,84,64,${0.12 * (this.#killT / 160)})`
                 ctx.fillRect(0, 0, w, h)
                 ctx.globalCompositeOperation = 'source-over'
             }
@@ -335,11 +345,11 @@ export class GlitchFX {
                 const s = this.lowHp
                 if (Math.random() < 0.08 + 0.35 * s) {
                     const y1 = Math.random() * h | 0
-                    ctx.fillStyle = Math.random() < 0.5 ? 'rgba(207,232,207,0.4)' : 'rgba(0,0,0,0.6)'
+                    ctx.fillStyle = Math.random() < 0.5 ? 'rgba(232,207,207,0.4)' : 'rgba(0,0,0,0.6)'
                     ctx.fillRect(0, y1, w, 1)
                 }
                 ctx.globalCompositeOperation = 'multiply'
-                ctx.fillStyle = `rgba(10,20,10,${0.12 * s})`
+                ctx.fillStyle = `rgba(26,9,9,${0.12 * s})`
                 ctx.fillRect(0, 0, w, h)
                 ctx.globalCompositeOperation = 'source-over'
                 const T = lerp(1100, 420, Math.max(this.proximity, s * 0.6))
@@ -351,7 +361,7 @@ export class GlitchFX {
 
             // micro-glitches
             if (this.#suppressMicroT <= 0 && this.#chokeFrames === 0) {
-                if (Math.random() < 0.005) {
+                if (Math.random() < 0.012) {
                     const nRects = 2 + Math.floor(Math.random() * 3)
                     for (let i = 0; i < nRects; i++) {
                         const bw = 16 + Math.random() * 32, bh = 8 + Math.random() * 16
@@ -415,7 +425,7 @@ export class GlitchFX {
         const t = this.#winT
         if (t < 300) {
             ctx.globalCompositeOperation = 'lighter'
-            ctx.fillStyle = `rgba(216,255,216,${0.5 * (1 - t / 300)})`
+            ctx.fillStyle = `rgba(255,216,210,${0.5 * (1 - t / 300)})`
             ctx.fillRect(0, 0, w, h)
             ctx.globalCompositeOperation = 'source-over'
         } else if (t < 750) {
@@ -430,7 +440,7 @@ export class GlitchFX {
             ctx.fillStyle = '#020402'
             ctx.fillRect(0, 0, w, h)
             if (t < 900) {
-                ctx.fillStyle = `rgba(207,232,207,${1 - (t - 750) / 150})`
+                ctx.fillStyle = `rgba(232,207,207,${1 - (t - 750) / 150})`
                 ctx.fillRect(0, h / 2, w, 1)
             }
         }

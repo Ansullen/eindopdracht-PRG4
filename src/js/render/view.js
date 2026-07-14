@@ -7,7 +7,7 @@ import { ScreenElement, Canvas, ImageFiltering, vec } from 'excalibur'
 import { Raycaster, makeCamera } from './raycaster.js'
 import { GlitchFX } from './glitch.js'
 import { Sprites, makeCorruptTexture } from './pixelart.js'
-import { drawOSD, drawDeathCard, drawWinCard } from './osd.js'
+import { drawDeathCard, drawWinCard } from './osd.js'
 import { WorldFX } from './worldfx.js'
 import { Res } from '../resources.js'
 import { Level, TILE } from '../level.js'
@@ -45,7 +45,6 @@ export class RaycastView extends ScreenElement {
     #tint = null
     #playMs = 0
     #playMsAtEnd = 0
-    #keyFlashUntil = 0
     #lastAngle = 0
     #turning = false
     #proximity = 0
@@ -121,8 +120,7 @@ export class RaycastView extends ScreenElement {
                     this.#tint = { color: 'rgba(80,255,120,0.25)', until: now + 100 }
                     break
                 case 'key':
-                    this.#tint = { color: 'rgba(255,200,60,0.3)', until: now + 100 }
-                    this.#keyFlashUntil = now + 1500
+                    this.#tint = { color: 'rgba(255,80,50,0.35)', until: now + 100 }
                     this.#glitch.onRewind()
                     break
                 case 'unlock':
@@ -271,7 +269,7 @@ export class RaycastView extends ScreenElement {
             b.fillRect(cx, cy, 1, 1)
         } else {
             const sp = this.#spreadT > 0 ? 1 : 0
-            b.fillStyle = 'rgba(159,223,159,0.6)'
+            b.fillStyle = 'rgba(223,159,150,0.6)'
             b.fillRect(cx - 2 - sp, cy, 2, 1)
             b.fillRect(cx + 1 + sp, cy, 2, 1)
             b.fillRect(cx, cy - 2 - sp, 1, 2)
@@ -287,7 +285,7 @@ export class RaycastView extends ScreenElement {
         const speed = Math.min(p.vel.magnitude / MAX_SPEED, 1)
         const horizon = H / 2 + Math.abs(Math.sin(this.#bobPhase)) * 2 * speed
         const lightPop = this.#flashT > 40 ? 0.25 : 0
-        const corruption = this.#glitch.lowHp * 0.06 + (this.#glitch.trauma > 0.6 ? 0.08 : 0)
+        const corruption = 0.015 + this.#glitch.lowHp * 0.08 + (this.#glitch.trauma > 0.5 ? 0.1 : 0)
 
         const cam = makeCamera(p.pos.x / TILE, p.pos.y / TILE, p.angle, FOV)
         this.#raycaster.renderWalls(b, Level, cam, this.#wallTex, horizon, {
@@ -304,22 +302,6 @@ export class RaycastView extends ScreenElement {
             b.fillRect(0, 0, W, H)
             b.globalCompositeOperation = 'source-over'
         }
-
-        drawOSD(b, W, H, {
-            now,
-            playMs: this.#playMs,
-            hp: p.hp,
-            maxHp: 100,
-            ammo: p.ammo,
-            reserve: p.reserveAmmo,
-            kills: p.kills,
-            hasKey: p.hasKey,
-            proximity: this.#proximity,
-            trauma: this.#glitch.trauma,
-            dying: this.#glitch.dying,
-            reloadUntil: p.reloadUntil,
-            keyFlashUntil: this.#keyFlashUntil,
-        })
 
         this.#glitch.apply(b, now)
 

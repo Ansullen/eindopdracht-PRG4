@@ -1,30 +1,4 @@
-// Small DOM helpers for pickup popups and the end-of-game overlay,
-// styled to match the phosphor/VHS look.
-
-export function showPopup(text, color = '#7dc87d') {
-    const el = document.createElement('div')
-    el.textContent = text
-    el.style.cssText = [
-        'position: fixed',
-        'left: 50%',
-        'bottom: 28%',
-        'transform: translateX(-50%)',
-        'font-family: "Press Start 2P", monospace',
-        'font-size: 14px',
-        `color: ${color}`,
-        `text-shadow: 0 0 6px ${color}, 2px 2px 0 black`,
-        'z-index: 999',
-        'pointer-events: none',
-        'transition: transform 0.5s ease-out, opacity 0.5s ease-out',
-        'opacity: 1',
-    ].join(';')
-    document.body.appendChild(el)
-    requestAnimationFrame(() => {
-        el.style.transform = 'translateX(-50%) translateY(-24px)'
-        el.style.opacity = '0'
-    })
-    setTimeout(() => el.remove(), 600)
-}
+// End-of-game DOM overlay, styled to match the VHS look.
 
 export function showEndOverlay(title, subtitle, color) {
     const overlay = document.createElement('div')
@@ -59,7 +33,7 @@ export function showEndOverlay(title, subtitle, color) {
     subEl.style.cssText = [
         'font-family: "Press Start 2P", monospace',
         'font-size: 12px',
-        'color: #6d8f6d',
+        'color: #8f6d6d',
         'text-align: center',
     ].join(';')
 

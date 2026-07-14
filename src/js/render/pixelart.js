@@ -235,7 +235,7 @@ export function makeCorruptTexture(img) {
         ctx.drawImage(img, 0, y, img.width, 2, shift - img.width, y, img.width, 2)
     }
     ctx.globalCompositeOperation = 'source-atop'
-    ctx.fillStyle = 'rgba(30,255,80,0.28)'
+    ctx.fillStyle = 'rgba(255,50,30,0.35)'
     ctx.fillRect(0, 0, c.width, c.height)
     return c
 }

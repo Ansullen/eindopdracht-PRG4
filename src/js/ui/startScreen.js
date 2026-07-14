@@ -25,7 +25,7 @@ function injectChrome() {
             inset: 0;
             animation: title-glitch 2.4s steps(1, end) infinite;
         }
-        .glitch-text::before { color: #33ff66; transform: translateX(-2px); animation-delay: -1.2s; opacity: 0.6; }
+        .glitch-text::before { color: #ff6a5a; transform: translateX(-2px); animation-delay: -1.2s; opacity: 0.6; }
         .glitch-text::after { color: #7a1400; transform: translateX(2px); opacity: 0.6; }
         #crt-overlay {
             position: fixed;
@@ -33,8 +33,8 @@ function injectChrome() {
             pointer-events: none;
             z-index: 10000;
             background:
-                repeating-linear-gradient(to bottom, transparent 0 3px, rgba(0, 8, 0, 0.25) 3px 4px),
-                radial-gradient(ellipse at center, transparent 55%, rgba(2, 8, 2, 0.6) 100%);
+                repeating-linear-gradient(to bottom, transparent 0 3px, rgba(10, 0, 0, 0.28) 3px 4px),
+                radial-gradient(ellipse at center, transparent 55%, rgba(8, 2, 2, 0.6) 100%);
             animation: crt-flicker 90ms steps(2) infinite;
         }
     `
@@ -66,7 +66,7 @@ export function showStartScreen(engine) {
         feed.style.cssText = [
             'font-family: "Press Start 2P", monospace',
             'font-size: 10px',
-            'color: #6d8f6d',
+            'color: #8f6d6d',
             'letter-spacing: 2px',
         ].join(';')
 
@@ -88,8 +88,8 @@ export function showStartScreen(engine) {
         controls.style.cssText = [
             'font-family: "Press Start 2P", monospace',
             'font-size: 11px',
-            'color: #7dc87d',
-            'text-shadow: 0 0 6px rgba(125,200,125,0.5)',
+            'color: #c87d7d',
+            'text-shadow: 0 0 6px rgba(200,125,125,0.5)',
             'line-height: 1.6',
             'text-align: center',
         ].join(';')
